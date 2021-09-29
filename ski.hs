@@ -46,7 +46,7 @@ mkGamestate w = GameState {
   }
 
 delayinit = 200000
-pathwidthinit = 40
+pathwidthinit = 60
 pathwidthmin = 0
 
 main = do
@@ -81,8 +81,8 @@ loop g@GameState{..} = do
     scorediv10 = score `div` 10 + 1
     scorediv20 = score `div` 20 + 1
     -- delay'     = max 10000 (delayinit - scorediv5 * 25000)
-    delay'     = max 5000 (delay - (delay `div` 50))
-    pathwidth' = max pathwidthmin (pathwidthinit - scorediv20)
+    delay'     = max 10000 (delay - (delay `div` 50))
+    pathwidth' = max pathwidthmin (pathwidthinit - scorediv10)
     maxdx      = 1 -- min (pathwidth' `div` 4) scorediv10
   pathdx <- randomRIO (-maxdx,maxdx)
   playerdx <- randomRIO (-1,1)
