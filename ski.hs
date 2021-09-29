@@ -1,18 +1,19 @@
-#!/usr/bin/env stack script --compile --resolver lts-18 --verbosity=warn
-{-# OPTIONS_GHC -Wno-missing-signatures -Wno-unused-imports #-}
-{-# LANGUAGE RecordWildCards #-}
+#!/usr/bin/env stack 
+-- stack script --compile --resolver=lts-18 --verbosity=warn
+--   --package random
 
 -- ski.hs - Downhill Skier Driver Space Pilot !
 
+{-# OPTIONS_GHC -Wno-missing-signatures -Wno-unused-imports #-}
+{-# LANGUAGE RecordWildCards #-}
+
 import Control.Concurrent
 import Control.Monad
--- import Data.Char
--- import Data.List
 import Debug.Trace
--- import System.Environment
 import System.IO
 import System.Random
 import Text.Printf
+import System.Exit
 
 data GameState = GameState {
    score       :: Int
@@ -22,6 +23,8 @@ data GameState = GameState {
   ,pathchar    :: Char
   ,pathwidth   :: Int
   ,pathcenter  :: Int
+  ,playerx     :: Int
+  ,playerchar  :: Char
   }
 
 mkGamestate w = GameState {
@@ -32,9 +35,11 @@ mkGamestate w = GameState {
   ,pathchar    = ' '
   ,pathwidth   = pathwidthinit
   ,pathcenter  = w `div` 2
+  ,playerx     = w `div` 2
+  ,playerchar  = 'V'
   }
 
-delayinit = 200000
+delayinit = 100000
 pathwidthinit = 40
 pathwidthmin = 0
 
@@ -46,21 +51,23 @@ main = do
 setup = do
   hSetEcho stdout False
   hSetBuffering stdout NoBuffering
+  hSetBuffering stdin NoBuffering
   -- putStr "\033[2J"
 
 intro = do
   let delay = 1000000
-  putStrLn ""
-  putStrLn "** Welcome, Downhill Skier Driver Space Pilot! How far can you go ? **"
-  threadDelay delay
-  putStrLn "Your mouse pointer is you. Avoid the walls! Honour system collision detection."
-  threadDelay delay
-  putStrLn "** Get ready to race! **"
+  putStrLn "** Welcome to the Downhill Skier Driver Space Pilot Simulator! **"
+  -- threadDelay delay
+  -- putStrLn "Your mouse pointer is you. Avoid the walls! Honour system collision detection."
+  -- threadDelay delay
+  -- putStrLn "Get ready to race!"
+  -- putStrLn "How far will the bot get ?"
   putStrLn ""
   threadDelay delay
 
 loop g@GameState{..} = do
   -- calculate
+  let input = ' '  -- input <- getChar
   let
     score'     = score + 1
     margin     = 8
@@ -70,36 +77,60 @@ loop g@GameState{..} = do
     delay'     = max 20000 (delayinit - scorediv10 * 15000)
     pathwidth' = max pathwidthmin (pathwidthinit - scorediv10)
     maxdx      = min (pathwidth' `div` 3) scorediv10
-  dx <- randomRIO (-maxdx,maxdx)
+  pathdx <- randomRIO (-maxdx,maxdx)
+  playerdx <- randomRIO (-1,1)
   let
     pathLeft  center width = center - half width
     pathRight center width = center + half width
     pathcenter' =
-      case pathcenter + dx of
+      case pathcenter + pathdx of
         x | pathLeft  x pathwidth' < pathmin -> pathmin + half pathwidth'
         x | pathRight x pathwidth' > pathmax -> pathmax - half pathwidth'
         x -> x
+    -- playerx'   = case input of
+    --                'z' -> playerx - 1
+    --                'x' -> playerx + 1
+    --                _   -> playerx
+    playerx' = playerx + playerdx
+    collision = abs (pathcenter' - playerx') >= half pathwidth'
+    g' = g{score=score'
+          ,delay=delay'
+          ,pathcenter=pathcenter'
+          ,pathwidth=pathwidth'
+          ,playerx=playerx'
+          }
 
   -- draw
   let
-    leftwallwidth = pathLeft pathcenter' pathwidth' - 1
+    leftwallwidth  = pathLeft pathcenter' pathwidth' - 1
     rightwallwidth = screenwidth - pathRight pathcenter' pathwidth' - 1
-  -- print [
-  --    leftwallwidth
-  --   ,pathwidth
-  --   ,rightwallwidth
-  --   ]
+    leftpathwidth  = playerx' - leftwallwidth
+    rightpathwidth = pathwidth' - leftpathwidth - 1
   putStrLn $ concat [
      replicate leftwallwidth wallchar
-    ,replicate pathwidth pathchar
+    ,replicate leftpathwidth pathchar
+    ,[if collision then '*' else playerchar]
+    ,replicate rightpathwidth pathchar
     ,replicate rightwallwidth wallchar
-    ,"\r"
-    ,printf "# %4d " score'
+    ,printf " %d " score'
     ]
 
   -- loop
-  threadDelay delay
-  when (pathwidth > 0) $
-    loop g{score=score', delay=delay', pathcenter=pathcenter', pathwidth=pathwidth'}
-
+  if collision
+  then do
+    putStrLn ""
+    putStrLn "** BOOM! **"
+    putStrLn $ "Bot's score was " ++ show score' ++ "." -- , try again!"
+    -- threadDelay 5000000
+    putStrLn "Press q to quit, any other key for another run."
+    putStrLn ""
+    c <- getChar
+    case c of
+      'q' -> exitSuccess
+      _ -> do
+        loop $ mkGamestate 80
+  else do
+    threadDelay delay
+    loop g'
+    
 half = (`div` 2)
