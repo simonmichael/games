@@ -21,6 +21,11 @@ import System.Random
 import Text.Printf
 import System.Exit
 
+delayinit = 200000
+pathwidthinit = 60
+pathwidthmin = 0
+crashchar = 'x'
+
 data GameState = GameState {
    score       :: Int
   ,wallchar    :: Char
@@ -44,10 +49,6 @@ mkGamestate w = GameState {
   ,playerx     = w `div` 2
   ,playerchar  = 'V'
   }
-
-delayinit = 200000
-pathwidthinit = 60
-pathwidthmin = 0
 
 main = do
   setup
@@ -99,7 +100,7 @@ loop g@GameState{..} = do
     --                'x' -> playerx + 1
     --                _   -> playerx
     playerx' = playerx + playerdx
-    collision = abs (pathcenter' - playerx') >= half pathwidth'
+    collision = abs (pathcenter' - playerx') > half pathwidth'
     g' = g{score=score'
           ,delay=delay'
           ,pathcenter=pathcenter'
@@ -110,24 +111,28 @@ loop g@GameState{..} = do
   -- draw
   let
     leftwallwidth  = pathLeft pathcenter' pathwidth' - 1
-    rightwallwidth = screenwidth - pathRight pathcenter' pathwidth' - 1
-    leftpathwidth  = playerx' - leftwallwidth
+    rightwallwidth = screenwidth - leftwallwidth - pathwidth' - if collision then 1 else 0
+    leftpathwidth  = playerx' - leftwallwidth - 1
     rightpathwidth = pathwidth' - leftpathwidth - 1
-  putStrLn $ concat [
-     replicate leftwallwidth wallchar
-    ,replicate leftpathwidth pathchar
-    ,[if collision then '*' else playerchar]
-    ,replicate rightpathwidth pathchar
-    ,replicate rightwallwidth wallchar
-    ,printf " %d " score'
-    ]
+    line =
+      take (screenwidth-4) (
+        concat [
+          replicate leftwallwidth wallchar
+         ,replicate leftpathwidth pathchar
+         ,[if collision then crashchar else playerchar]
+         ,replicate rightpathwidth pathchar
+         ,replicate (rightwallwidth-3) wallchar
+         ]) ++
+      printf "%4d" score'
+    -- ,' ':show [leftwallwidth,pathwidth',rightwallwidth,sum [leftwallwidth,pathwidth',rightwallwidth]]
+  putStrLn line
 
   -- loop
   if collision
   then do
     putStrLn ""
     putStrLn "** BOOM! **"
-    putStrLn $ "Bot's score was " ++ show score' ++ "." -- , try again!"
+    putStrLn $ "Score was " ++ show score' ++ "." -- , try again!"
     putStrLn "Press q to quit, any other key for another run."
     putStrLn ""
     c <- getChar
