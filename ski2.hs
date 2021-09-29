@@ -9,8 +9,7 @@
 -- packages. Change "warn" above to "info" to see progress output.
 
 {-# OPTIONS_GHC -Wno-missing-signatures -Wno-unused-imports #-}
-{-# LANGUAGE MultiWayIf #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE MultiWayIf, RecordWildCards #-}
 
 import Control.Concurrent
 -- import Control.Monad
