@@ -1,8 +1,14 @@
 #!/usr/bin/env stack 
 -- stack script --compile --resolver=lts-18 --verbosity=warn
 --   --package random
-
+--
 -- ski.hs - Downhill Skier Driver Space Pilot !
+-- 
+-- stack is not required to run or compile this script, but it makes
+-- things just work. The first time you run this script, it may
+-- install ghc and any required packages, causing it to hang for a
+-- while with no output. Change "warn" above to "info" to see the
+-- output, or just wait.
 
 {-# OPTIONS_GHC -Wno-missing-signatures -Wno-unused-imports #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -52,7 +58,6 @@ setup = do
   hSetEcho stdout False
   hSetBuffering stdout NoBuffering
   hSetBuffering stdin NoBuffering
-  -- putStr "\033[2J"
 
 intro = do
   let delay = 1000000
@@ -67,7 +72,6 @@ intro = do
 
 loop g@GameState{..} = do
   -- calculate
-  let input = ' '  -- input <- getChar
   let
     score'     = score + 1
     margin     = 8
@@ -124,7 +128,6 @@ loop g@GameState{..} = do
     putStrLn ""
     putStrLn "** BOOM! **"
     putStrLn $ "Bot's score was " ++ show score' ++ "." -- , try again!"
-    -- threadDelay 5000000
     putStrLn "Press q to quit, any other key for another run."
     putStrLn ""
     c <- getChar
