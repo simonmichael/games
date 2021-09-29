@@ -95,7 +95,7 @@ loop g@GameState{..} = do
         x | pathLeft  x pathwidth' < pathmin -> pathmin + half pathwidth'
         x | pathRight x pathwidth' > pathmax -> pathmax - half pathwidth'
         x -> x
-    skill = 1
+    skill = 0
   playerdx <- randomRIO $
     if | playerx < pathcenter' ->
            case skill of
