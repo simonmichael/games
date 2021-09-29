@@ -39,7 +39,7 @@ mkGamestate w = GameState {
   ,playerchar  = 'V'
   }
 
-delayinit = 100000
+delayinit = 200000
 pathwidthinit = 40
 pathwidthmin = 0
 
@@ -73,10 +73,13 @@ loop g@GameState{..} = do
     margin     = 8
     pathmin    = margin
     pathmax    = screenwidth - margin
+    scorediv5  = score `div` 5 + 1
     scorediv10 = score `div` 10 + 1
-    delay'     = max 20000 (delayinit - scorediv10 * 15000)
-    pathwidth' = max pathwidthmin (pathwidthinit - scorediv10)
-    maxdx      = min (pathwidth' `div` 3) scorediv10
+    scorediv20 = score `div` 20 + 1
+    -- delay'     = max 10000 (delayinit - scorediv5 * 25000)
+    delay'     = max 5000 (delay - (delay `div` 50))
+    pathwidth' = max pathwidthmin (pathwidthinit - scorediv20)
+    maxdx      = 1 -- min (pathwidth' `div` 4) scorediv10
   pathdx <- randomRIO (-maxdx,maxdx)
   playerdx <- randomRIO (-1,1)
   let
