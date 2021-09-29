@@ -1,14 +1,13 @@
 #!/usr/bin/env stack 
--- stack script --compile --resolver=lts-18 --verbosity=warn
---   --package random
+-- stack --resolver=lts-18 script --compile --verbosity=warn --package random
 --
 -- ski.hs - Downhill Skier Driver Space Pilot !
 -- 
 -- stack is not required to run or compile this script, but it makes
 -- things just work. The first time you run this script, it may
 -- install ghc and any required packages, causing it to hang for a
--- while with no output. Change "warn" above to "info" to see the
--- output, or just wait.
+-- while (could be minutes) with no output. Change "warn" above to
+-- "info" to see the output.
 
 {-# OPTIONS_GHC -Wno-missing-signatures -Wno-unused-imports #-}
 {-# LANGUAGE MultiWayIf #-}
