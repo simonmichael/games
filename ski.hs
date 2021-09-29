@@ -11,6 +11,7 @@
 -- output, or just wait.
 
 {-# OPTIONS_GHC -Wno-missing-signatures -Wno-unused-imports #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE RecordWildCards #-}
 
 import Control.Concurrent
@@ -21,7 +22,7 @@ import System.Random
 import Text.Printf
 import System.Exit
 
-delayinit = 200000
+delayinit = 100000
 pathwidthinit = 60
 pathwidthmin = 0
 crashchar = 'x'
@@ -86,7 +87,6 @@ loop g@GameState{..} = do
     pathwidth' = max pathwidthmin (pathwidthinit - scorediv10)
     maxdx      = 1 -- min (pathwidth' `div` 4) scorediv10
   pathdx <- randomRIO (-maxdx,maxdx)
-  playerdx <- randomRIO (-1,1)
   let
     pathLeft  center width = center - half width
     pathRight center width = center + half width
@@ -95,6 +95,24 @@ loop g@GameState{..} = do
         x | pathLeft  x pathwidth' < pathmin -> pathmin + half pathwidth'
         x | pathRight x pathwidth' > pathmax -> pathmax - half pathwidth'
         x -> x
+    skill = 1
+  playerdx <- randomRIO $
+    if | playerx < pathcenter' ->
+           case skill of
+             0 -> (-1,1)
+             1 -> (0,1)
+             _ -> (1,1)
+       | playerx > pathcenter' ->
+           case skill of
+             0 -> (-1,1)
+             1 -> (-1,0)
+             _ -> (-1,-1)
+       | otherwise ->
+           case skill of
+             0 -> (-1,1)
+             1 -> (-1,1)
+             _ -> (0,0)
+  let
     -- playerx'   = case input of
     --                'z' -> playerx - 1
     --                'x' -> playerx + 1
