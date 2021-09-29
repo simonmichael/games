@@ -1,13 +1,12 @@
 #!/usr/bin/env stack 
 -- stack --resolver=lts-18 script --compile --verbosity=warn --package random
 --
--- ski.hs - Downhill Skier Driver Space Pilot !
+-- ski1.hs - a one file haskell terminal game, using basic terminal output.
 -- 
--- stack is not required to run or compile this script, but it makes
--- things just work. The first time you run this script, it may
--- install ghc and any required packages, causing it to hang for a
--- while (could be minutes) with no output. Change "warn" above to
--- "info" to see the output.
+-- stack is not required to run or compile this haskell script, but it
+-- makes things just work. On first running this script it may hang
+-- for a while (could be minutes) to install ghc and any required
+-- packages. Change "warn" above to "info" to see progress output.
 
 {-# OPTIONS_GHC -Wno-missing-signatures -Wno-unused-imports #-}
 {-# LANGUAGE MultiWayIf #-}

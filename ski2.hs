@@ -1,7 +1,7 @@
 #!/usr/bin/env stack 
 -- stack --resolver=lts-18 script --compile --verbosity=warn --ghc-options=-threaded --package random --package ansi-terminal-game --package linebreak --package timers-tick --package unidecode
 --
--- ski.hs - a one file haskell terminal game.
+-- ski2.hs - a one file haskell terminal game, using ansi-terminal-game.
 -- 
 -- stack is not required to run or compile this haskell script, but it
 -- makes things just work. On first running this script it may hang

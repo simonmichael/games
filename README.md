@@ -4,7 +4,7 @@ How hard is it to make classic terminal games in Haskell ?
 
 Some problems and solutions:
 
-- complex packaging boilerplate, complex install instructions:\
+- complex packaging boilerplate, complex/unreliable install process:\
   use a stack script with `script` command
 
 - getting stack script options just right:\
@@ -25,11 +25,14 @@ Some problems and solutions:
   cradle:
     stack:
   ```
-  and `stack install` each extra package in stack's global project.
+  and `stack install` each extra package in stack's global project.\
   (Still flaky..)
 
 - getting non-blocking terminal input:\
   use ansi-terminal-game
+
+- running stack script in threaded mode for ansi-terminal-game:\
+  add --ghc-options=-threaded to stack options line
 
 - getting arrow key and modifier key inputs
 
