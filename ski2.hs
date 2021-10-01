@@ -1,6 +1,7 @@
 #!/usr/bin/env stack 
--- stack --resolver=lts-18 script --compile --verbosity=warn --ghc-options=-threaded --package random --package ansi-terminal-game --package linebreak --package timers-tick --package unidecode
---
+-- stack --resolver=lts-18 script --optimize --verbosity=warn --ghc-options=-threaded --package random --package ansi-terminal-game --package linebreak --package timers-tick --package unidecode --package safe
+-------------------------------------------------------------------------------
+
 -- ski2.hs - a one file haskell terminal game, using ansi-terminal-game.
 -- 
 -- stack is not required to run or compile this haskell script, but it
@@ -8,99 +9,262 @@
 -- for a while (could be minutes) to install ghc and any required
 -- packages. Change "warn" above to "info" to see progress output.
 
+-- Setting keyboard repeat rate:
+-- Mac:
+-- https://apple.stackexchange.com/questions/411531/increase-keyrepeat-speed-in-macos-big-sur
+--  defaults write NSGlobalDomain InitialKeyRepeat -int 10  # 15
+--  defaults write NSGlobalDomain KeyRepeat -int 1          # 2
+
+-------------------------------------------------------------------------------
+
 {-# OPTIONS_GHC -Wno-missing-signatures -Wno-unused-imports #-}
 {-# LANGUAGE MultiWayIf, RecordWildCards #-}
 
-import Control.Concurrent
--- import Control.Monad
+import Control.Monad
 import Debug.Trace
--- import System.IO
-import System.Random
+import Safe
 import Terminal.Game
 import Text.Printf
--- import System.Exit
 
-delayinit     = 100000
-pathwidthinit = 60
-pathwidthmin  = 0
-crashchar     = '*'
+-------------------------------------------------------------------------------
+
+(leftkey,rightkey) = (',','.')
+restarttimerticks  = secsToTicks 5
+wallchar       = '#'
+pathchar       = ' '
+crashchar      = '*'
+fps            = 60
+
+pathmarginmin  = 2
+pathwidthmin   = 0
+
+pathspeedmax   = fromInteger $ half fps -- maximum speed, should be <= fps
+
+-- pathspeedinit  = 2               -- initial path scrolling speed
+-- pathspeedaccel = 1.005           -- multiply speed by this much each game tick
+-- pathspeedbrake = 0.7             -- multiply speed by this much each player movement (autobraking)
+-- -- player's minimum/maximum y position relative to screen height.
+-- -- if different, view panning is enabled.
+-- (playerymin, playerymax) = (0.2, 0.6)
+
+pathspeedinit  = 4
+pathspeedaccel = 1.001
+pathspeedbrake = 0.8
+(playerymin, playerymax) = (0.4, 0.4)
+
+-- pathspeedinit  = 1
+-- pathspeedaccel = 1.01
+-- pathspeedbrake = 0.9
+-- (playerymin, playerymax) = (0.1, 0.7)
+
+-------------------------------------------------------------------------------
 
 data GameState = GameState {
-   score        :: Integer
-  ,wallchar     :: Char
-  ,delay        :: Int
-  ,screenwidth  :: Width
-  ,screenheight :: Height
-  ,pathchar     :: Char
-  ,pathwidth    :: Width
-  ,pathcenter   :: Column
-  ,playerx      :: Column
-  ,playerchar   :: Char
-  ,playercollision :: Bool
-  ,quitpressed  :: Bool
+   screenw         :: Width
+  ,screenh         :: Height
+  ,randomgen       :: StdGen
+  ,gtick           :: Integer    -- current game tick
+  ,highscore       :: Integer
+  ,score           :: Integer
+  ,pathsteps       :: Integer    -- how many path segments have been traversed since game start
+  ,path            :: [PathLine] -- path segments, newest/bottom-most first
+  ,pathwidth       :: Width      -- current path width
+  ,pathcenter      :: Column     -- current path center
+  ,pathspeed       :: Float      -- current speed of path scroll in steps/s, must be <= fps
+  ,pathspeedbase   :: Float      -- current minimum path scroll speed player can brake to
+                                 -- Float so it can be incremented smoothly.
+  ,pathtimer       :: Timed Bool -- delay before next path scroll
+  ,viewscroll      :: Height     -- how many rows to pan the viewport down based on current speed
+  ,playery         :: Row
+  ,playerx         :: Column
+  ,playerchar      :: Char
+  ,playercollision :: Bool       -- player has crashed
+  ,restarttimer    :: Timed Bool -- delay between player collision and restart
+  ,pause           :: Bool       -- whether to keep the game paused
+  ,exit            :: Bool       -- whether to completely exit the app
   }
 
-mkGamestate w h = GameState {
-   score        = 0
-  ,wallchar     = '#'
-  ,delay        = delayinit
-  ,screenwidth  = w
-  ,screenheight = h
-  ,pathchar     = ' '
-  ,pathwidth    = pathwidthinit
-  ,pathcenter   = w `div` 2
-  ,playerx      = w `div` 2
-  ,playerchar   = 'V'
+newGameState w h rg hs = GameState {
+   screenw         = w
+  ,screenh         = h
+  ,randomgen       = rg
+  ,gtick           = 0
+  ,highscore       = hs
+  ,score           = 0
+  ,pathsteps       = 0
+  ,path            = []
+  ,pathwidth       = half w
+  ,pathcenter      = half w
+  ,pathspeed       = pathspeedinit
+  ,pathspeedbase   = pathspeedinit * 2
+  ,pathtimer       = newPathTimer pathspeedinit
+  ,viewscroll      = 0
+  ,playery         = playerYMin h
+  ,playerx         = half w
+  ,playerchar      = 'V'
   ,playercollision = False
-  ,quitpressed  = False
+  ,restarttimer    = creaBoolTimer 0
+  ,pause           = False
+  ,exit            = False
   }
+
+-- Convert steps/s to ticks/step and create a timer for one step.
+-- The steps/s should be no greater than ticks/s (the frame rate),
+-- and will be capped at that (creating a one-tick timer).
+newPathTimer stepspersec = creaBoolTimer ticks
+  where
+    ticks = max 1 (secsToTicks  $ 1 / stepspersec)
+
+data PathLine = PathLine Column Column  -- left wall, right wall
+
+-------------------------------------------------------------------------------
+
+-- putStrLn "** Welcome to the Downhill Skier Driver Space Pilot Simulator! **"
+-- putStrLn "Get ready to race!"
 
 main = do
   (w,h) <- displaySize
-  intro
-  playGame
-    Game { gScreenWidth   = w,
-           gScreenHeight  = h,
-           gFPS           = 13,
-           gInitState     = mkGamestate w h,
-           gLogicFunction = step,
-           gDrawFunction  = draw,
-           gQuitFunction  = quit
-         }
+  rg <- getStdGen
+  playloop w h rg 0
 
-intro = do
-  -- putStrLn "** Welcome to the Downhill Skier Driver Space Pilot Simulator! **"
-  -- putStrLn "Get ready to race!"
-  -- threadDelay 1000000
-  return ()
+playloop w h rg hs = do
+  GameState{..} <- playGameS $ newGame w h rg hs
+  when (not exit) $ do
+    (w',h') <- displaySize
+    playloop w' h' randomgen (max highscore score)
 
-quit g@GameState{..} = quitpressed
+newGame screenw screenh rg hs = 
+  Game { gScreenWidth   = screenw,
+         gScreenHeight  = screenh-1,  -- last line is unusable on windows apparently
+         gFPS           = fps,
+         gInitState     = newGameState screenw screenh rg hs,
+         gLogicFunction = step,
+         gDrawFunction  = draw,
+         gQuitFunction  = quit
+       }
 
-step g@GameState{..} (KeyPress 'q') = g { quitpressed = True }
-step g@GameState{..} (KeyPress ',') = g { playerx = max 1 (playerx - 1) }
-step g@GameState{..} (KeyPress '.') = g { playerx = min screenwidth (playerx + 1) }
+-------------------------------------------------------------------------------
+
+step g@GameState{..} (KeyPress k)
+  | k == 'q'              = g { exit = True }
+  | k `elem` "p ", pause  = g { pause = False }
+  | k `elem` "p "         = g { pause = True }
+  | k == leftkey,  not (playercollision || pause) =
+      g { playerx = max 1 (playerx - 1)
+        , pathspeed = max pathspeedbase (pathspeed * pathspeedbrake)
+        }
+  | k == rightkey, not (playercollision || pause) =
+      g { playerx = min screenw (playerx + 1)
+        , pathspeed = max pathspeedbase (pathspeed * pathspeedbrake)
+        }
 step g@GameState{..} Tick =
   let
-    score'     = score + 1
-    margin     = 8
-    pathmin    = margin
-    pathmax    = screenwidth - margin
-    scorediv5  = score `div` 5 + 1
-    scorediv10 = score `div` 10 + 1
-    scorediv20 = score `div` 20 + 1
-    -- delay'     = max 10000 (delayinit - scorediv5 * 25000)
-    delay'     = max 10000 (delay - (delay `div` 50))
-    pathwidth' = max pathwidthmin (pathwidthinit - scorediv10)
-    maxdx      = 1 -- min (pathwidth' `div` 4) scorediv10
-  -- pathdx <- randomRIO (-maxdx,maxdx)
-    pathdx = 0 -- XXX
-    pathcenter' =
-      case pathcenter + pathdx of
-        x | pathLeft  x pathwidth' < pathmin -> pathmin + half pathwidth'
-        x | pathRight x pathwidth' > pathmax -> pathmax - half pathwidth'
-        x -> x
+    -- game
+    gtick'      = gtick + 1
+    gtick10     = gtick' `div` 10 + 1
+
+    -- path
+    -- gradually narrow path
+    pathwidth' = max pathwidthmin (half screenw - pathsteps `div` 10)
+    -- gradually accelerate
+    pathspeed' = min pathspeedmax (pathspeed * pathspeedaccel)
+    -- slowly increase minimum speed ?
+    -- pathspeedbase' = pathspeedinit * 2 + fromInteger (pathsteps `div` 100)
+    pathspeedbase' = pathspeedbase
+
+    -- player
+    playercollision' =
+      case path `atMay` int (playerHeight g) of
+        Just (PathLine l r) -> playerx <= l || playerx > r
+        Nothing             -> False
+    
+    -- start restart timer if collision just happened
+    restarttimer' =
+      case (playercollision, playercollision') of
+        (False, True) -> creaBoolTimer restarttimerticks
+        _             -> tick restarttimer
+                          
+    -- update things depending on the situation
+    (rg', pathcenter', path', pathsteps', pathtimer', score', highscore', viewscroll')
+      | playercollision' =
+        -- player has crashed
+        (randomgen, pathcenter, path, pathsteps, pathtimer, score, max score highscore, viewscroll)
+      | isExpired pathtimer =
+        -- scroll the path
+       -- trace "scroll" $
+        let
+          -- choose path's next sideways displacement
+          -- maxdx = 1
+          maxdx = min (pathwidth' `div` 4) (pathsteps `div` 100 + 1)
+          (pathdx, rg') = getRandom (-maxdx,maxdx) randomgen
+          -- adjust the path center sideways within limits
+          pathcenter' =
+            case pathcenter + pathdx of
+              x | pathLeft  x pathwidth' < pathmin -> pathmin + half pathwidth'
+              x | pathRight x pathwidth' > pathmax -> pathmax - half pathwidth'
+              x -> x
+            where
+              pathLeft  center width = center - half width
+              pathRight center width = center + half width
+              pathmargin = max pathmarginmin (screenw `div` 40)
+              pathmin    = pathmargin
+              pathmax    = screenw - pathmargin
+          l = pathcenter' - half pathwidth'
+          r = pathcenter' + half pathwidth'
+          -- Pan the viewport up (player and walls move down) as speed increases,
+          -- as much as player Y min and max allow,
+          -- at most one row every few path steps, and only after screen has filled.
+          vs' =
+            if | length path < int screenh               -> viewscroll
+               | length path < int screenh               -> viewscroll
+               | vs > viewscroll, pathsteps `mod` 5 == 0 -> viewscroll+1
+               | vs < viewscroll, pathsteps `mod` 5 == 0 -> viewscroll-1
+               | otherwise                               -> viewscroll
+            where
+              vs = round $
+                   fromInteger (playerYMax screenh - playerYMin screenh)
+                   * (pathspeed'-pathspeedinit) / (pathspeedmax-pathspeedinit)
+        in
+          (rg'
+          ,pathcenter'
+          ,take (int screenh * 2) $ PathLine l r : path  -- extra offscreen lines are saved for viewscroll
+          ,pathsteps + 1
+          ,newPathTimer pathspeed'
+          ,score + if pathsteps >= playerHeight g then 1 else 0
+          ,highscore
+          ,vs'
+          )
+     | otherwise =
+       -- wait
+       -- trace "wait" $
+       (randomgen, pathcenter, path, pathsteps, tick pathtimer, score, highscore, viewscroll)
+
+  in
+    if | pause || playercollision ->
+         g{gtick           = gtick'
+          ,restarttimer    = restarttimer'
+          }
+       | otherwise ->
+         g{randomgen       = rg'
+          ,gtick           = gtick'
+          ,highscore       = highscore'
+          ,score           = score'
+          ,pathsteps       = pathsteps'
+          ,path            = path'
+          ,pathcenter      = pathcenter'
+          ,pathwidth       = pathwidth'
+          ,pathspeed       = pathspeed'
+          ,pathspeedbase   = pathspeedbase'
+          ,pathtimer       = pathtimer'
+          ,viewscroll      = viewscroll'
+          ,playercollision = playercollision'
+          ,restarttimer    = restarttimer'
+          }
+step g _ = g
+
+-- bot player
     -- skill = 0
-  -- playerdx <- randomRIO $
+    -- playerdx <- randomRIO $
     -- playerdx = fst $ -- XXX
     --   if | playerx < pathcenter' ->
     --          case skill of
@@ -118,51 +282,89 @@ step g@GameState{..} Tick =
     --            1 -> (-1,1)
     --            _ -> (0,0)
     -- playerx' = playerx + playerdx
-    playercollision' = abs (pathcenter' - playerx) > half pathwidth'
 
-  -- if playercollision
-  -- then do
-  --   putStrLn ""
-  --   putStrLn "** BOOM! **"
-  --   putStrLn $ "Score was " ++ show score ++ "." -- , try again!"
-  --   putStrLn "Press q to quit, any other key for another run."
-  --   putStrLn ""
-    
-  in
-    g{score=score'
-     ,delay=delay'
-     ,pathcenter=pathcenter'
-     ,pathwidth=pathwidth'
-     ,playercollision=playercollision'
-     }
-step g _ = g
+-------------------------------------------------------------------------------
+
+-- Should the current game be ended ?
+quit g@GameState{..} =
+  playercollision && isExpired restarttimer && not pause  --  if the restart timer just ended and not paused
+  || exit  -- or if q was pressed
+
+-------------------------------------------------------------------------------
 
 draw g@GameState{..} =
-  let
-    leftwallwidth  = pathLeft pathcenter pathwidth - 1
-    rightwallwidth = screenwidth - leftwallwidth - pathwidth - if playercollision then 1 else 0
-    leftpathwidth  = playerx - leftwallwidth - 1
-    rightpathwidth = pathwidth - leftpathwidth - 1
+    blankPlane screenw screenh
+  & (max 1 (screenh - toInteger (length path)), 1) % drawPath g
+  & (1,1) % drawTitle
+  & (3,1) % drawHelp g
+  & (1, half screenw - 8) % drawHighScore highscore
+  & (1, screenw - 10) % drawScore score
+  & (2, screenw - 10) % drawSpeed g
+  -- & (3, screenw - 13) % drawStats g
+  & (playery+viewscroll, playerx) % cell c #bold #color hue Vivid
+  where
+    (c,hue) | playercollision = (crashchar,Red)
+            | otherwise       = (playerchar,Blue)
+
+drawTitle = 
+      cell 's' #bold #color Red Vivid
+  ||| cell 'k' #bold #color Blue Vivid
+  ||| cell 'i' #bold #color Yellow Vivid
+  ||| cell '!' #bold #color Green Vivid
+  ||| cell ' '
+  -- ||| stringPlane " avoid the walls. "
+
+drawHelp GameState{..} = 
+  (cell leftkey  #bold  ||| stringPlane " left ")
+  ===
+  (cell rightkey #bold  ||| stringPlane " right ")
+  ===
+  (cell 'p'      #bold  ||| if pause then stringPlane " pause " #bold else stringPlane " pause ")
+  ===
+  (cell 'q'      #bold  ||| if exit then stringPlane " quit " #bold else stringPlane " quit ")
+
+drawHighScore score =
+  stringPlane " high score " ||| stringPlane (printf "%04d " score) #bold
+
+drawScore score =
+  stringPlane " score " ||| stringPlane (printf "%04d " score) #bold
+
+drawSpeed g@GameState{..} =
+      (stringPlane " speed " ||| stringPlane (printf "%4.f " pathspeed))
+
+drawStats g@GameState{..} =
+      (stringPlane "    depth " ||| stringPlane (printf "%3d " (max 0 (pathsteps - playerHeight g))))
+  === (stringPlane "    width " ||| stringPlane (printf "%3d " pathwidth))
+  === (stringPlane " minspeed " ||| stringPlane (printf "%3.f " pathspeedbase))
+  -- === (stringPlane " speedpan " ||| stringPlane (printf "%3d " viewscroll))
+  === (stringPlane "    speed " ||| stringPlane (printf "%3.f " pathspeed))
+
+drawPath GameState{..} = vcat (map (drawPathLine screenw) $ reverse $ take (int screenh) $ drop (int viewscroll) path)
+
+drawPathLine screenw (PathLine left right) = 
+  stringPlane line
+  where
     line =
-      take (fromIntegral $ screenwidth-4) (
-        concat [
-          replicate (fromIntegral leftwallwidth) wallchar
-         ,replicate (fromIntegral leftpathwidth) pathchar
-         ,[if playercollision then crashchar else playerchar]
-         ,replicate (fromIntegral rightpathwidth) pathchar
-         ,replicate (fromIntegral $ rightwallwidth-3) wallchar
-         ]) ++
-      printf "%4d" score
-    -- ,' ':show [leftwallwidth,pathwidth',rightwallwidth,sum [leftwallwidth,pathwidth',rightwallwidth]]
-  in
-    blankPlane screenwidth screenheight &
-    (1, 1)  % box '#'    screenwidth     screenheight            &
-    (2, 2)  % box ' '    (screenwidth-2) (screenheight-2)        &
-    (1, 10) % textBox " , to move left, . to move right. Avoid the walls! q to quit " 61 1 &
-    (half screenheight, playerx) % cell playerchar # color Green Vivid 
+      -- take (int $ screenw) $
+      concat [
+         replicate (int left) wallchar
+        ,replicate (int $ right - left) pathchar
+        ,replicate (int $ screenw - right ) wallchar
+        ]
 
-pathLeft  center width = center - half width
+-------------------------------------------------------------------------------
 
-pathRight center width = center + half width
+-- Convert player's y coordinate measured from screen top, to height measured from screen bottom.
+playerHeight GameState{..} = screenh - playery - 1
+
+-- Get the player's minimum and maximum y coordinate.
+playerYMin screenh = round $ playerymin * fromInteger screenh
+playerYMax screenh = round $ playerymax * fromInteger screenh
+
+-- Convert seconds to game ticks based on global frame rate.
+secsToTicks :: Float -> Integer
+secsToTicks = round . (* fromInteger fps)
+
+int = fromIntegral
 
 half = (`div` 2)
