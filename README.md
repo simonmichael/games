@@ -6,7 +6,8 @@ Basic terminal version ([ski1.hs](ski1.hs)):
 
 ansi-terminal-game version ([ski2.hs](ski2.hs)):
 
-![screencast](ski2b.gif)
+![screencast](ski2.anim.gif)
+https://asciinema.org/a/f1xjpZx6UuuNBJcs5nGiGiKWo
 
 ## Some problems and solutions
 
