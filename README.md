@@ -1,22 +1,23 @@
-# ski
+# SM's games and game dev notes
 
-Basic terminal version ([ski1.hs](ski1.hs)):
 
-![screencast](ski1.anim.gif)
+## Games and experiments
 
-ansi-terminal-game version ([ski2.hs](ski2.hs)):
+[ski](ski)
 
-![screencast](ski2.anim.gif)
-https://asciinema.org/a/f1xjpZx6UuuNBJcs5nGiGiKWo
-
-## Some problems and solutions
+## Haskell game development
 
 How hard is it to make classic terminal/console games in Haskell ?
 Pretty hard to figure out a good setup; relatively easy after that.
 These notes and the examples in this repo aim to help.
-Last updated 2021-09.
 
-### Packaging
+Last updated: 2021-09\
+Discussion: https://matrix.to/#/#haskell-game:matrix.org
+
+
+### Some problems and solutions:
+
+#### Packaging
 
 - Minimising packaging boilerplate & complex/unreliable install instructions:\
   use a [stack script with `script` command](https://docs.haskellstack.org/en/stable/GUIDE/#script-interpreter)
@@ -58,7 +59,7 @@ Last updated 2021-09.
   asciicast2gif or similar to convert those to animated GIF images;
   add the images to a README.md.
 
-### Tools
+#### Tools
 
 - Getting haskell-language-server to see extra packages, eg for editing in VS Code:\
   add this `hie.yaml` in the same directory:
@@ -77,7 +78,7 @@ Last updated 2021-09.
   Add lines above your imports like\
   `{-# LANGUAGE MultiWayIf, RecordWildCards #-}`
 
-### Functionality
+#### Functionality
 
 - Drawing anywhere on the terminal, portably:\
   use [ansi-terminal](https://hackage.haskell.org/package/ansi-terminal)
