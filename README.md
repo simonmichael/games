@@ -2,10 +2,15 @@ Small games and game dev notes.
 
 ## Games and experiments
 
-- [ski](ski)
-- [sm-breakout](https://github.com/simonmichael/sm-breakout)
-- [metapong](https://github.com/simonmichael/metapong)
-- [symon](https://github.com/simonmichael/symon)
+- [ski](ski) 2021
+- [sm-breakout](https://github.com/simonmichael/sm-breakout) 2020, 2007
+- [metapong](https://github.com/simonmichael/metapong) 2019
+- [symon](https://github.com/simonmichael/symon) 2016
+- [guess-the-number](https://hub.darcs.net/simon/guess-the-number/browse/guess-the-number.hs) 2013
+- [hssdl-osx-template](https://hub.darcs.net/simon/hssdl-osx-template) 2013
+- [animtest-hs](https://hub.darcs.net/simon/animtest-hs) haskell, 2010
+- [wallofdoom](https://hub.darcs.net/simon/wallofdoom) python, 2009
+- [rocks-io](https://hub.darcs.net/simon/rocks-io) IO, 2005
 
 ## Haskell game development
 
