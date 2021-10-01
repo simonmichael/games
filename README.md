@@ -1,4 +1,4 @@
-Small games and game dev notes.
+Small games, experiments and game dev notes.
 
 ## Games and experiments
 
@@ -10,15 +10,19 @@ Small games and game dev notes.
 - [hssdl-osx-template](https://hub.darcs.net/simon/hssdl-osx-template) 2013
 - [animtest-hs](https://hub.darcs.net/simon/animtest-hs) haskell, 2010
 - [wallofdoom](https://hub.darcs.net/simon/wallofdoom) python, 2009
-- [rocks-io](https://hub.darcs.net/simon/rocks-io) IO, 2005
+- [rocks](https://hub.darcs.net/simon/rocks) IO, 2005
+- [frozen-bubble-py](https://hub.darcs.net/simon/frozen-bubble-py) python, 2002
 
 ## Haskell game development
 
-How hard is it to make classic terminal/console games in Haskell ?
-Pretty hard to figure out a good setup; relatively easy after that.
-These notes and examples aim to help. Last updated 2021-09.
+### How hard is it to make classic terminal/console games in Haskell ?
 
-### Some problems and solutions:
+Pretty hard to figure out a good setup; relatively easy after that.
+These notes and examples aim to help.
+
+### Some problems and solutions
+
+(Last updated 2021-09.)
 
 #### Packaging
 
@@ -95,7 +99,7 @@ These notes and examples aim to help. Last updated 2021-09.
 - Getting arrow key and modifier key inputs:\
   use vty
 
-### See also:
+### See also
 
 - [#haskell-game matrix](https://matrix.to/#/#haskell-game:matrix.org) / [IRC](https://web.libera.chat/#haskell-game) chat
 - https://github.com/haskell-game
