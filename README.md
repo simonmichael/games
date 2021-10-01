@@ -2,7 +2,7 @@
 
 Basic terminal version ([ski1.hs](ski1.hs)):
 
-![screencast](ski1.gif)
+![screencast](ski1.anim.gif)
 
 ansi-terminal-game version ([ski2.hs](ski2.hs)):
 
