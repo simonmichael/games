@@ -6,7 +6,7 @@ Basic terminal version ([ski1.hs](ski1.hs)):
 
 ansi-terminal-game version ([ski2.hs](ski2.hs)):
 
-![screencast](ski2.gif)
+![screencast](ski2b.gif)
 
 ## Some problems and solutions
 
@@ -17,7 +17,7 @@ Last updated 2021-09.
 
 ### Packaging
 
-- Minimising complex packaging boilerplate & complex/unreliable install instructions:\
+- Minimising packaging boilerplate & complex/unreliable install instructions:\
   use a [stack script with `script` command](https://docs.haskellstack.org/en/stable/GUIDE/#script-interpreter)
 
 - Getting stack script options just right:
@@ -51,7 +51,7 @@ Last updated 2021-09.
   - mac: get your app packaged in homebrew
   - etc.
 
-- Showing screenshots/screencasts:\
+- Providing screenshots/screencasts:\
   use a convenient screenshot tool on your platform (eg CMD-SHIFT-5 and friends on mac);
   or install and use asciinema to record .cast files,
   asciicast2gif or similar to convert those to animated GIF images;
