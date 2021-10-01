@@ -1,19 +1,17 @@
-# SM's games and game dev notes
-
+Small games and game dev notes.
 
 ## Games and experiments
 
-[ski](ski)
+- [ski](ski)
+- [sm-breakout](https://github.com/simonmichael/sm-breakout)
+- [metapong](https://github.com/simonmichael/metapong)
+- [symon](https://github.com/simonmichael/symon)
 
 ## Haskell game development
 
 How hard is it to make classic terminal/console games in Haskell ?
 Pretty hard to figure out a good setup; relatively easy after that.
-These notes and the examples in this repo aim to help.
-
-Last updated: 2021-09\
-Discussion: https://matrix.to/#/#haskell-game:matrix.org
-
+These notes and examples aim to help. Last updated 2021-09.
 
 ### Some problems and solutions:
 
@@ -91,3 +89,11 @@ Discussion: https://matrix.to/#/#haskell-game:matrix.org
 
 - Getting arrow key and modifier key inputs:\
   use vty
+
+### See also:
+
+- [#haskell-game matrix](https://matrix.to/#/#haskell-game:matrix.org) / [IRC](https://web.libera.chat/#haskell-game) chat
+- https://github.com/haskell-game
+- http://www.reddit.com/r/haskellgamedev
+- http://www.haskell.org/haskellwiki/Game_Development
+- http://hackage.haskell.org/packages/#cat:Game
