@@ -113,14 +113,16 @@ data PathLine = PathLine Column Column  -- left wall, right wall
 
 main = do
   (w,h) <- displaySize
-  let caveseed = 1
-  playloop w h (mkStdGen caveseed) 0
+  let
+    caveseed  = 1
+    randomgen = mkStdGen caveseed
+  playloop w h randomgen 0
 
 playloop w h rg hs = do
-  GameState{randomgen,score,highscore,exit} <- playGameS $ newGame w h rg hs
+  GameState{score,highscore,exit} <- playGameS $ newGame w h rg hs
   unless exit $ do
     (w',h') <- displaySize
-    playloop w' h' randomgen (max highscore score)
+    playloop w' h' rg (max highscore score)
 
 newGame screenw screenh rg hs =
   Game { gScreenWidth   = screenw,
