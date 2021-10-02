@@ -15,9 +15,19 @@ Small games, experiments and game dev notes.
 
 ## Haskell game development
 
-### How hard is it to make video games in Haskell ?
+### See also
 
-Pretty hard to figure out a good setup; relatively easy after that.
+- [#haskell-game matrix](https://matrix.to/#/#haskell-game:matrix.org) / [IRC](https://web.libera.chat/#haskell-game) chat (also Discord, Telegram chats)
+- https://haskell-game.dev
+- http://www.reddit.com/r/haskellgamedev
+- http://www.haskell.org/haskellwiki/Game_Development
+- http://hackage.haskell.org/packages/#cat:Game
+- https://github.com/haskell-game
+
+### How hard is it to make games in Haskell ?
+
+Pretty hard to figure out a good setup; relatively easy and pleasant after that,
+for non-resource-intensive games at least.
 These notes and examples aim to help.
 
 ### Some problems and solutions
@@ -39,16 +49,14 @@ Use a [stack script with `script` command](https://docs.haskellstack.org/en/stab
   Follow-on lines will be silently ignored.
 
 **Avoiding apparent hang when ghc is installed on first run**\
-add `--verbosity=info` to stack options line to show ghc install progress
+Add `--verbosity=info` to stack options line to show ghc install progress
 (but this also shows unwanted "resolver" output on every run.
 `--verbosity=warning` hides that, but still shows package install progress.
 `--verbosity=error` hides that too.)
 
 **Avoiding recompilation delay on every run**\
-use `script --compile` in stack options line
-
-**Recompiling with full optimisation, accepting greater recompilation delay**\
-use `script --optimize` instead of `script --compile`
+Use `script --compile` in stack options line
+(or `script --optimize`, which might take longer and/or run faster).
 
 **Running stack script in threaded mode when using packages that require this**\
 (ansi-terminal-game, etc.):  add `--ghc-options=-threaded` to stack options line
@@ -98,11 +106,3 @@ use [vty](https://hackage.haskell.org/package/vty) and [brick](https://hackage.h
 
 **Getting arrow key and modifier key inputs**\
 use vty
-
-### See also
-
-- [#haskell-game matrix](https://matrix.to/#/#haskell-game:matrix.org) / [IRC](https://web.libera.chat/#haskell-game) chat
-- https://github.com/haskell-game
-- http://www.reddit.com/r/haskellgamedev
-- http://www.haskell.org/haskellwiki/Game_Development
-- http://hackage.haskell.org/packages/#cat:Game
