@@ -162,7 +162,7 @@ step g@GameState{..} Tick =
         Nothing             -> False
         Just (PathLine l r) -> playerx <= l || playerx > r
 
-  in
+  in  -- breaks my haskell-mode's indentation
     if
       | pause ->  -- paused
         g'
@@ -178,62 +178,14 @@ step g@GameState{..} Tick =
 
       | isExpired pathtimer ->  -- time to step the path
         let
-          pathsteps' = pathsteps + 1
-
-          -- hurryup - slowly increase minimum speed ?
-          -- pathspeedbase' = pathspeedinit * 2 + float (pathsteps `div` 100)
-          pathspeedbase' = pathspeedbase
-
-          -- narrowing - gradually narrow path
-          pathwidth' = max pathwidthmin (half screenw - pathsteps' `div` 10)
-
-          -- morejagged - slowly increase max allowed sideways shift
-          -- maxdx = 1
-          maxdx = min (pathwidth' `div` 4) (pathsteps' `div` 100 + 1)
-
-          -- choose path's next x position, with constraints:
-          -- keep the walls within bounds
-          (randomdx, randomgen') = getRandom (-maxdx,maxdx) randomgen
-          pathcenter' =
-            let
-              x = pathcenter + randomdx
-              (l,r) = pathWalls x pathwidth'
-              (pathmin,pathmax) = (margin, screenw - margin)
-                where
-                  margin = max pathmarginmin (screenw `div` 40)
-            in
-              if | l < pathmin -> pathmin + half pathwidth'
-                 | r > pathmax -> pathmax - half pathwidth'
-                 | otherwise   -> x
-
-          -- extend the path, discarding old lines,
-          -- except for an extra screenful that might be needed for speedpan
-          path' = take (int screenh * 2) $ PathLine l r : path
-            where
-              (l,r) = pathWalls pathcenter' pathwidth'
-
-          -- speedpan - as speed increases, pan the viewport up (player and walls move down)
-          -- with constraints:
-          -- only after screen has filled with path steps
-          -- pan gradually, at most one row every few path steps
-          -- keep player within configured min/max Y bounds
-          speedpan' =
-            if | speedpan < idealpan, readytopan -> speedpan+1
-               | speedpan > idealpan, readytopan -> speedpan-1
-               | otherwise                       -> speedpan
-            where
-              readytopan = 
-                length path' >= int screenh
-                && pathsteps' `mod` 5 == 0
-              idealpan =
-                round $
-                float (playerYMax screenh - playerYMin screenh)
-                * (pathspeed'-pathspeedinit) / (pathspeedmax-pathspeedinit)
-
-          -- increase score for every step deeper into the cave
-          score' | pathsteps >= playerHeight g = score + 1
-                 | otherwise                   = score
-
+          (pathsteps',
+           pathspeedbase',
+           pathwidth',
+           randomgen',
+           pathcenter',
+           path')   = stepPath     g'
+          speedpan' = stepSpeedpan g' pathsteps' pathspeed' path'
+          score'    = stepScore    g' pathsteps'
         in
           g'{randomgen       = randomgen'
             ,score           = score'
@@ -248,10 +200,73 @@ step g@GameState{..} Tick =
             ,playercollision = playercollision'
             }
 
-      | otherwise ->  -- nothing special happening
+      | otherwise ->  -- time is passing
         g'{pathtimer = tick pathtimer}
 
-step g _ = g
+stepPath GameState{..} =
+  (pathsteps'
+  ,pathspeedbase'
+  ,pathwidth'
+  ,randomgen'
+  ,pathcenter'
+  ,path')
+  where
+    pathsteps' = pathsteps + 1
+
+    -- hurryup - slowly increase minimum speed ?
+    -- pathspeedbase' = pathspeedinit * 2 + float (pathsteps `div` 100)
+    pathspeedbase' = pathspeedbase
+
+    -- narrowing - gradually narrow path
+    pathwidth' = max pathwidthmin (half screenw - pathsteps' `div` 10)
+
+    -- morejagged - slowly increase max allowed sideways shift
+    -- maxdx = 1
+    maxdx = min (pathwidth' `div` 4) (pathsteps' `div` 100 + 1)
+
+    -- choose path's next x position, with constraints:
+    -- keep the walls within bounds
+    (randomdx, randomgen') = getRandom (-maxdx,maxdx) randomgen
+    pathcenter' =
+      let
+        x = pathcenter + randomdx
+        (l,r) = pathWalls x pathwidth'
+        (pathmin,pathmax) = (margin, screenw - margin)
+          where
+            margin = max pathmarginmin (screenw `div` 40)
+      in
+        if | l < pathmin -> pathmin + half pathwidth'
+           | r > pathmax -> pathmax - half pathwidth'
+           | otherwise   -> x
+
+    -- extend the path, discarding old lines,
+    -- except for an extra screenful that might be needed for speedpan
+    path' = take (int screenh * 2) $ PathLine l r : path
+      where
+        (l,r) = pathWalls pathcenter' pathwidth'
+
+-- speedpan - as speed increases, pan the viewport up (player and walls move down)
+-- with constraints:
+-- only after screen has filled with path steps
+-- pan gradually, at most one row every few path steps
+-- keep player within configured min/max Y bounds
+stepSpeedpan GameState{..} pathsteps' pathspeed' path'
+  | speedpan < idealpan, readytopan = speedpan+1
+  | speedpan > idealpan, readytopan = speedpan-1
+  | otherwise                       = speedpan
+  where
+    readytopan = 
+      length path' >= int screenh
+      && pathsteps' `mod` 5 == 0
+    idealpan =
+      round $
+      float (playerYMax screenh - playerYMin screenh)
+      * (pathspeed'-pathspeedinit) / (pathspeedmax-pathspeedinit)
+
+-- increase score for every step deeper into the cave
+stepScore g@GameState{..} pathsteps'
+  | pathsteps' >= playerHeight g = score + 1
+  | otherwise                    = score
 
 -- bot player
     -- skill = 0
@@ -354,7 +369,7 @@ newPathTimer stepspersec = creaBoolTimer ticks
     ticks = max 1 (secsToTicks  $ 1 / stepspersec)
 
 -- Convert player's y coordinate measured from screen top, to height measured from screen bottom.
-playerHeight GameState{..} = screenh - playery - 1
+playerHeight GameState{..} = screenh - playery
 
 -- Calculate the player's minimum and maximum y coordinate.
 playerYMin screenh = round $ playerymin * float screenh
