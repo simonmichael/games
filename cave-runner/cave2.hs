@@ -178,16 +178,18 @@ step g@GameState{..} Tick =
 
       | isExpired pathtimer ->  -- time to step the path
         let
-          -- narrowing - gradually narrow path
-          pathwidth' = max pathwidthmin (half screenw - pathsteps `div` 10)
+          pathsteps' = pathsteps + 1
 
           -- hurryup - slowly increase minimum speed ?
           -- pathspeedbase' = pathspeedinit * 2 + float (pathsteps `div` 100)
           pathspeedbase' = pathspeedbase
 
+          -- narrowing - gradually narrow path
+          pathwidth' = max pathwidthmin (half screenw - pathsteps' `div` 10)
+
           -- morejagged - slowly increase max allowed sideways shift
           -- maxdx = 1
-          maxdx = min (pathwidth' `div` 4) (pathsteps `div` 100 + 1)
+          maxdx = min (pathwidth' `div` 4) (pathsteps' `div` 100 + 1)
 
           -- choose path's next x position, with constraints:
           -- keep the walls within bounds
@@ -209,39 +211,40 @@ step g@GameState{..} Tick =
           path' = take (int screenh * 2) $ PathLine l r : path
             where
               (l,r) = pathWalls pathcenter' pathwidth'
-          pathsteps' = pathsteps + 1
 
           -- speedpan - as speed increases, pan the viewport up (player and walls move down)
           -- with constraints:
           -- only after screen has filled with path steps
-          -- keep player within configured player Y min/max
-          -- pan at most one row every few path steps
+          -- pan gradually, at most one row every few path steps
+          -- keep player within configured min/max Y bounds
           speedpan' =
-            if | length path' < int screenh      -> speedpan
-               | speedpan < idealpan, readytopan -> speedpan+1
+            if | speedpan < idealpan, readytopan -> speedpan+1
                | speedpan > idealpan, readytopan -> speedpan-1
                | otherwise                       -> speedpan
             where
-              readytopan = pathsteps' `mod` 5 == 0  -- for gradual panning - or make speedpan a Float ?
-              idealpan = round $
-                         float (playerYMax screenh - playerYMin screenh)
-                         * (pathspeed'-pathspeedinit) / (pathspeedmax-pathspeedinit)
+              readytopan = 
+                length path' >= int screenh
+                && pathsteps' `mod` 5 == 0
+              idealpan =
+                round $
+                float (playerYMax screenh - playerYMin screenh)
+                * (pathspeed'-pathspeedinit) / (pathspeedmax-pathspeedinit)
 
-          -- score is depth (path steps) reached within the cave
+          -- increase score for every step deeper into the cave
           score' | pathsteps >= playerHeight g = score + 1
                  | otherwise                   = score
 
         in
           g'{randomgen       = randomgen'
             ,score           = score'
+            ,speedpan        = speedpan'
+            ,pathsteps       = pathsteps'
             ,path            = path'
-            ,pathcenter      = pathcenter'
             ,pathwidth       = pathwidth'
+            ,pathcenter      = pathcenter'
             ,pathspeed       = pathspeed'
             ,pathspeedbase   = pathspeedbase'
             ,pathtimer       = newPathTimer pathspeed'
-            ,pathsteps       = pathsteps'
-            ,speedpan        = speedpan'
             ,playercollision = playercollision'
             }
 
