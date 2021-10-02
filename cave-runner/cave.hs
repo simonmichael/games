@@ -18,9 +18,11 @@
 -------------------------------------------------------------------------------
 
 {-# OPTIONS_GHC -Wno-missing-signatures -Wno-unused-imports #-}
-{-# LANGUAGE MultiWayIf, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE MultiWayIf, NamedFieldPuns, RecordWildCards, ScopedTypeVariables #-}
 
 import Control.Monad
+import Data.List
+import Data.Maybe
 import Debug.Trace
 import Safe
 import Terminal.Game
@@ -30,16 +32,30 @@ import Text.Printf
 
 (leftkey,rightkey) = (',','.')
 restarttimerticks  = secsToTicks 5
-wallchar       = '#'
-pathchar       = ' '
-crashchar      = '*'
-fps            = 60
+wallchar           = '#'
+pathchar           = ' '
+crashchar          = '*'
+fps                = 60
 
-pathmarginmin  = 2
-pathwidthmin   = 0
+pathmarginmin      = 2
+pathwidthmin       = 0
+-- how long to stay at each path width, eg:
+--  (20, 2) "at 20+,   narrow (by 1) every 2 path steps"
+--  (10,10) "at 10-19, narrow every 10 steps"
+--  ( 8,50) "at 8-9,   narrow every 50 steps"
+pathwidthdurations = [
+   (20,2)
+  ,(10,10)
+  ,( 8,50)
+  ,( 7,50)
+  ,( 6,50)
+  ,( 5,50)
+  ,( 4,50)
+  ,( 3,50)
+  ,( 2,5)
+  ]
 
-pathspeedmax   = float $ half fps -- maximum speed, should be <= fps
-
+-- pathspeedmax   = float $ half fps -- maximum path steps/s, should be <= fps
 -- pathspeedinit  = 2               -- initial path scrolling speed
 -- pathspeedaccel = 1.005           -- multiply speed by this much each game tick
 -- pathspeedbrake = 0.7             -- multiply speed by this much each player movement (autobraking)
@@ -47,15 +63,17 @@ pathspeedmax   = float $ half fps -- maximum speed, should be <= fps
 -- -- if different, view panning is enabled.
 -- (playerymin, playerymax) = (0.2, 0.6)
 
-pathspeedinit  = 4
-pathspeedaccel = 1.001
-pathspeedbrake = 0.8
-(playerymin, playerymax) = (0.4, 0.4)
+-- pathspeedmax   = float $ half fps
+-- pathspeedinit  = 4
+-- pathspeedaccel = 1.001
+-- pathspeedbrake = 0.8
+-- (playerymin, playerymax) = (0.4, 0.4)
 
--- pathspeedinit  = 1
--- pathspeedaccel = 1.01
--- pathspeedbrake = 0.9
--- (playerymin, playerymax) = (0.1, 0.7)
+pathspeedmax   = 15
+pathspeedinit  = 1
+pathspeedaccel = 1.01
+pathspeedbrake = 1
+(playerymin, playerymax) = (0.4, 0.4)
 
 -------------------------------------------------------------------------------
 
@@ -221,11 +239,18 @@ stepPath GameState{..} =
     pathspeedbase' = pathspeedbase
 
     -- narrowing - gradually narrow path
-    pathwidth' = max pathwidthmin (half screenw - pathsteps' `div` 10)
+    pathwidth'
+      | cannarrow = max pathwidthmin (pathwidth - 1)
+      | otherwise = pathwidth
+      where
+        cannarrow = (pathsteps' `mod` interval) == 0
+          where
+            interval = maybe 1 snd $ find ((<= pathwidth) . fst) pathwidthdurations
 
-    -- morejagged - slowly increase max allowed sideways shift
-    -- maxdx = 1
-    maxdx = min (pathwidth' `div` 4) (pathsteps' `div` 100 + 1)
+    -- morejagged - slowly increase max allowed sideways shift ?
+    maxdx =
+      -- min (pathwidth' `div` 4) (pathsteps' `div` 100 + 1)
+      min (pathwidth' `div` 4) 1
 
     -- choose path's next x position, with constraints:
     -- keep the walls within bounds
