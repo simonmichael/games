@@ -2,9 +2,9 @@
 
 A simple one-file terminal game in Haskell.
 
-Basic terminal version using just print (putStrLn): [cave1.hs](cave1.hs)
+Basic terminal version using just print (putStrLn): [cave1.hs](old/cave1.hs)
 
-![screencast](cave1.anim.gif)
+![screencast](old/cave1.anim.gif)
 
 ansi-terminal-game version: [cave2.hs](cave2.hs)
 
