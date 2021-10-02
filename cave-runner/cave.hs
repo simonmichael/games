@@ -1,4 +1,4 @@
-
+#!/usr/bin/env stack 
 -- stack --resolver=lts-18 script --optimize --verbosity=warn --ghc-options=-threaded --package random --package ansi-terminal-game --package linebreak --package timers-tick --package unidecode --package safe
 -------------------------------------------------------------------------------
 
