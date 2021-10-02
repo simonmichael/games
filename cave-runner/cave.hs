@@ -148,6 +148,7 @@ step g@GameState{..} (KeyPress k)
       g { playerx = min screenw (playerx + 1)
         , pathspeed = max pathspeedbase (pathspeed * pathspeedbrake)
         }
+  | otherwise = g
 
 step g@GameState{..} Tick =
   let
