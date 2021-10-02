@@ -113,8 +113,8 @@ data PathLine = PathLine Column Column  -- left wall, right wall
 
 main = do
   (w,h) <- displaySize
-  rg <- getStdGen
-  playloop w h rg 0
+  let caveseed = 1
+  playloop w h (mkStdGen caveseed) 0
 
 playloop w h rg hs = do
   GameState{randomgen,score,highscore,exit} <- playGameS $ newGame w h rg hs
