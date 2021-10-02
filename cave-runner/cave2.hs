@@ -38,7 +38,7 @@ fps            = 60
 pathmarginmin  = 2
 pathwidthmin   = 0
 
-pathspeedmax   = fromInteger $ half fps -- maximum speed, should be <= fps
+pathspeedmax   = float $ half fps -- maximum speed, should be <= fps
 
 -- pathspeedinit  = 2               -- initial path scrolling speed
 -- pathspeedaccel = 1.005           -- multiply speed by this much each game tick
@@ -72,9 +72,8 @@ data GameState = GameState {
   ,pathcenter      :: Column     -- current path center
   ,pathspeed       :: Float      -- current speed of path scroll in steps/s, must be <= fps
   ,pathspeedbase   :: Float      -- current minimum path scroll speed player can brake to
-                                 -- Float so it can be incremented smoothly.
   ,pathtimer       :: Timed Bool -- delay before next path scroll
-  ,viewscroll      :: Height     -- how many rows to pan the viewport down based on current speed
+  ,viewscroll      :: Height     -- how many rows to pan the viewport down, based on current speed
   ,playery         :: Row
   ,playerx         :: Column
   ,playerchar      :: Char
@@ -108,19 +107,9 @@ newGameState w h rg hs = GameState {
   ,exit            = False
   }
 
--- Convert steps/s to ticks/step and create a timer for one step.
--- The steps/s should be no greater than ticks/s (the frame rate),
--- and will be capped at that (creating a one-tick timer).
-newPathTimer stepspersec = creaBoolTimer ticks
-  where
-    ticks = max 1 (secsToTicks  $ 1 / stepspersec)
-
 data PathLine = PathLine Column Column  -- left wall, right wall
 
 -------------------------------------------------------------------------------
-
--- putStrLn "** Welcome to the Downhill Skier Driver Space Pilot Simulator! **"
--- putStrLn "Get ready to race!"
 
 main = do
   (w,h) <- displaySize
@@ -169,7 +158,7 @@ step g@GameState{..} Tick =
     -- gradually accelerate
     pathspeed' = min pathspeedmax (pathspeed * pathspeedaccel)
     -- slowly increase minimum speed ?
-    -- pathspeedbase' = pathspeedinit * 2 + fromInteger (pathsteps `div` 100)
+    -- pathspeedbase' = pathspeedinit * 2 + float (pathsteps `div` 100)
     pathspeedbase' = pathspeedbase
 
     -- player
@@ -222,7 +211,7 @@ step g@GameState{..} Tick =
                | otherwise                               -> viewscroll
             where
               vs = round $
-                   fromInteger (playerYMax screenh - playerYMin screenh)
+                   float (playerYMax screenh - playerYMin screenh)
                    * (pathspeed'-pathspeedinit) / (pathspeedmax-pathspeedinit)
         in
           (rg'
@@ -283,8 +272,6 @@ step g _ = g
     --            _ -> (0,0)
     -- playerx' = playerx + playerdx
 
--------------------------------------------------------------------------------
-
 -- Should the current game be ended ?
 quit g@GameState{..} =
   playercollision && isExpired restarttimer && not pause  --  if the restart timer just ended and not paused
@@ -323,56 +310,59 @@ drawTitle = hcat [
   ]
 
 drawHelp GameState{..} = 
-  (cell leftkey  #bold  ||| stringPlane " left ")
-  ===
-  (cell rightkey #bold  ||| stringPlane " right ")
-  ===
-  (cell 'p'      #bold  ||| if pause then stringPlane " pause " #bold else stringPlane " pause ")
-  ===
-  (cell 'q'      #bold  ||| if exit then stringPlane " quit " #bold else stringPlane " quit ")
+      (cell leftkey  #bold  ||| stringPlane " left ")
+  === (cell rightkey #bold  ||| stringPlane " right ")
+  === (cell 'p'      #bold  ||| if pause then stringPlane " pause " #bold else stringPlane " pause ")
+  === (cell 'q'      #bold  ||| if exit then stringPlane " quit " #bold else stringPlane " quit ")
 
-drawHighScore score =
-  stringPlane " high score " ||| stringPlane (printf "%04d " score) #bold
+drawHighScore score = stringPlane " high score " ||| stringPlane (printf "%04d " score) #bold
 
-drawScore score =
-  stringPlane " score " ||| stringPlane (printf "%04d " score) #bold
+drawScore score = stringPlane " score " ||| stringPlane (printf "%04d " score) #bold
 
-drawSpeed g@GameState{..} =
-      (stringPlane " speed " ||| stringPlane (printf "%4.f " pathspeed))
+drawSpeed g@GameState{..} = stringPlane " speed " ||| stringPlane (printf "%4.f " pathspeed)
 
 drawStats g@GameState{..} =
       (stringPlane "    depth " ||| stringPlane (printf "%3d " (max 0 (pathsteps - playerHeight g))))
   === (stringPlane "    width " ||| stringPlane (printf "%3d " pathwidth))
   === (stringPlane " minspeed " ||| stringPlane (printf "%3.f " pathspeedbase))
   -- === (stringPlane " speedpan " ||| stringPlane (printf "%3d " viewscroll))
-  === (stringPlane "    speed " ||| stringPlane (printf "%3.f " pathspeed))
+  -- === (stringPlane "    speed " ||| stringPlane (printf "%3.f " pathspeed))
 
 drawPath GameState{..} = vcat (map (drawPathLine screenw) $ reverse $ take (int screenh) $ drop (int viewscroll) path)
 
-drawPathLine screenw (PathLine left right) = 
-  stringPlane line
+drawPathLine screenw (PathLine left right) = stringPlane line
   where
-    line =
-      -- take (int $ screenw) $
-      concat [
-         replicate (int left) wallchar
-        ,replicate (int $ right - left) pathchar
-        ,replicate (int $ screenw - right ) wallchar
-        ]
+    line = concat [
+       replicate (int left) wallchar
+      ,replicate (int $ right - left) pathchar
+      ,replicate (int $ screenw - right ) wallchar
+      ]
 
 -------------------------------------------------------------------------------
+
+-- Convert seconds to game ticks based on global frame rate.
+secsToTicks :: Float -> Integer
+secsToTicks = round . (* float fps)
+
+-- Convert steps/s to ticks/step and create a timer for one step.
+-- The steps/s should be no greater than ticks/s (the frame rate),
+-- and will be capped at that (creating a one-tick timer).
+newPathTimer stepspersec = creaBoolTimer ticks
+  where
+    ticks = max 1 (secsToTicks  $ 1 / stepspersec)
 
 -- Convert player's y coordinate measured from screen top, to height measured from screen bottom.
 playerHeight GameState{..} = screenh - playery - 1
 
--- Get the player's minimum and maximum y coordinate.
-playerYMin screenh = round $ playerymin * fromInteger screenh
-playerYMax screenh = round $ playerymax * fromInteger screenh
+-- Calculate the player's minimum and maximum y coordinate.
+playerYMin screenh = round $ playerymin * float screenh
+playerYMax screenh = round $ playerymax * float screenh
 
--- Convert seconds to game ticks based on global frame rate.
-secsToTicks :: Float -> Integer
-secsToTicks = round . (* fromInteger fps)
-
-int = fromIntegral
-
+half :: Integral a => a -> a
 half = (`div` 2)
+
+float :: Integer -> Float
+float = fromInteger
+
+int :: Integer -> Int
+int = fromIntegral
