@@ -2,8 +2,10 @@ Small games, experiments and game dev notes.
 
 ## Games and experiments
 
+(Mostly in haskell)
+
 - [cave-runner](cave-runner) 2021
-- [sm-breakout](https://github.com/simonmichael/sm-breakout) 2020, 2007
+- [sm-breakout](https://github.com/simonmichael/sm-breakout) 2007, 2020
 - [metapong](https://github.com/simonmichael/metapong) 2019
 - [symon](https://github.com/simonmichael/symon) 2016
 - [guess-the-number](https://hub.darcs.net/simon/guess-the-number/browse/guess-the-number.hs) 2013
@@ -12,6 +14,10 @@ Small games, experiments and game dev notes.
 - [wallofdoom](https://hub.darcs.net/simon/wallofdoom) python, 2009
 - [rocks](https://hub.darcs.net/simon/rocks) IO, 2005
 - [frozen-bubble-py](https://hub.darcs.net/simon/frozen-bubble-py) python, 2002
+
+Also:
+
+- [FunGEn game engine](https://github.com/haskell-game/fungen) maintenance, 2008-present
 
 ## Haskell game development
 
