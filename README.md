@@ -2,7 +2,7 @@ Small games, experiments and game dev notes.
 
 ## Games and experiments
 
-- [ski](ski) 2021
+- [cave-runner](cave-runner) 2021
 - [sm-breakout](https://github.com/simonmichael/sm-breakout) 2020, 2007
 - [metapong](https://github.com/simonmichael/metapong) 2019
 - [symon](https://github.com/simonmichael/symon) 2016

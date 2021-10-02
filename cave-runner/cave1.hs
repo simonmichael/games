@@ -1,7 +1,7 @@
 #!/usr/bin/env stack 
 -- stack --resolver=lts-18 script --compile --verbosity=warn --package random
 --
--- ski1.hs - a one file haskell terminal game, using basic terminal output.
+-- cave1.hs - a one file haskell terminal game, using basic terminal output.
 -- 
 -- stack is not required to run or compile this haskell script, but it
 -- makes things just work. On first running this script it may hang

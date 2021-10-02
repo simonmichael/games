@@ -2,7 +2,7 @@
 -- stack --resolver=lts-18 script --optimize --verbosity=warn --ghc-options=-threaded --package random --package ansi-terminal-game --package linebreak --package timers-tick --package unidecode --package safe
 -------------------------------------------------------------------------------
 
--- ski2.hs - a one file haskell terminal game, using ansi-terminal-game.
+-- cave2.hs - a one file haskell terminal game, using ansi-terminal-game.
 -- 
 -- stack is not required to run or compile this haskell script, but it
 -- makes things just work. On first running this script it may hang
@@ -306,13 +306,21 @@ draw g@GameState{..} =
     (c,hue) | playercollision = (crashchar,Red)
             | otherwise       = (playerchar,Blue)
 
-drawTitle = 
-      cell 's' #bold #color Red Vivid
-  ||| cell 'k' #bold #color Blue Vivid
-  ||| cell 'i' #bold #color Yellow Vivid
-  ||| cell '!' #bold #color Green Vivid
-  ||| cell ' '
-  -- ||| stringPlane " avoid the walls. "
+drawTitle = hcat [
+   cell 'c' #bold #color Red Vivid
+  ,cell 'a' #bold #color Blue Vivid
+  ,cell 'v' #bold #color Yellow Vivid
+  ,cell 'e' #bold #color Green Vivid
+  ,cell '-' #bold #color Red Vivid
+  ,cell 'r' #bold #color Blue Vivid
+  ,cell 'u' #bold #color Yellow Vivid
+  ,cell 'n' #bold #color Green Vivid
+  ,cell 'n' #bold #color Red Vivid
+  ,cell 'e' #bold #color Blue Vivid
+  ,cell 'r' #bold #color Yellow Vivid
+  ,cell '!' #bold #color Green Vivid
+  ,cell ' '
+  ]
 
 drawHelp GameState{..} = 
   (cell leftkey  #bold  ||| stringPlane " left ")

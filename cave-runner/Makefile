@@ -1,4 +1,4 @@
-PROG=ski2.hs
+PROG=cave2.hs
 
 # keep synced with script's stack header
 PACKAGES=--package random --package ansi-terminal-game --package linebreak --package timers-tick --package unidecode --package safe
