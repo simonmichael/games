@@ -1,4 +1,4 @@
-#!/usr/bin/env stack 
+
 -- stack --resolver=lts-18 script --optimize --verbosity=warn --ghc-options=-threaded --package random --package ansi-terminal-game --package linebreak --package timers-tick --package unidecode --package safe
 -------------------------------------------------------------------------------
 
@@ -18,7 +18,7 @@
 -------------------------------------------------------------------------------
 
 {-# OPTIONS_GHC -Wno-missing-signatures -Wno-unused-imports #-}
-{-# LANGUAGE MultiWayIf, RecordWildCards #-}
+{-# LANGUAGE MultiWayIf, NamedFieldPuns, RecordWildCards #-}
 
 import Control.Monad
 import Debug.Trace
@@ -66,21 +66,21 @@ data GameState = GameState {
   ,gtick           :: Integer    -- current game tick
   ,highscore       :: Integer
   ,score           :: Integer
+  ,speedpan        :: Height     -- current number of rows to pan the viewport down, based on current speed
   ,pathsteps       :: Integer    -- how many path segments have been traversed since game start
-  ,path            :: [PathLine] -- path segments, newest/bottom-most first
+  ,path            :: [PathLine] -- recent path segments for display, newest/bottom-most first
   ,pathwidth       :: Width      -- current path width
   ,pathcenter      :: Column     -- current path center
   ,pathspeed       :: Float      -- current speed of path scroll in steps/s, must be <= fps
   ,pathspeedbase   :: Float      -- current minimum path scroll speed player can brake to
   ,pathtimer       :: Timed Bool -- delay before next path scroll
-  ,viewscroll      :: Height     -- how many rows to pan the viewport down, based on current speed
   ,playery         :: Row
   ,playerx         :: Column
   ,playerchar      :: Char
-  ,playercollision :: Bool       -- player has crashed
-  ,restarttimer    :: Timed Bool -- delay between player collision and restart
-  ,pause           :: Bool       -- whether to keep the game paused
-  ,exit            :: Bool       -- whether to completely exit the app
+  ,playercollision :: Bool       -- player has crashed ?
+  ,restarttimer    :: Timed Bool -- delay before restart after player crash
+  ,pause           :: Bool       -- keep the game paused ?
+  ,exit            :: Bool       -- completely exit the app ?
   }
 
 newGameState w h rg hs = GameState {
@@ -90,6 +90,7 @@ newGameState w h rg hs = GameState {
   ,gtick           = 0
   ,highscore       = hs
   ,score           = 0
+  ,speedpan        = 0
   ,pathsteps       = 0
   ,path            = []
   ,pathwidth       = half w
@@ -97,12 +98,11 @@ newGameState w h rg hs = GameState {
   ,pathspeed       = pathspeedinit
   ,pathspeedbase   = pathspeedinit * 2
   ,pathtimer       = newPathTimer pathspeedinit
-  ,viewscroll      = 0
   ,playery         = playerYMin h
   ,playerx         = half w
   ,playerchar      = 'V'
   ,playercollision = False
-  ,restarttimer    = creaBoolTimer 0
+  ,restarttimer    = creaBoolTimer restarttimerticks
   ,pause           = False
   ,exit            = False
   }
@@ -117,12 +117,12 @@ main = do
   playloop w h rg 0
 
 playloop w h rg hs = do
-  GameState{..} <- playGameS $ newGame w h rg hs
-  when (not exit) $ do
+  GameState{randomgen,score,highscore,exit} <- playGameS $ newGame w h rg hs
+  unless exit $ do
     (w',h') <- displaySize
     playloop w' h' randomgen (max highscore score)
 
-newGame screenw screenh rg hs = 
+newGame screenw screenh rg hs =
   Game { gScreenWidth   = screenw,
          gScreenHeight  = screenh-1,  -- last line is unusable on windows apparently
          gFPS           = fps,
@@ -146,109 +146,108 @@ step g@GameState{..} (KeyPress k)
       g { playerx = min screenw (playerx + 1)
         , pathspeed = max pathspeedbase (pathspeed * pathspeedbrake)
         }
+
 step g@GameState{..} Tick =
   let
-    -- game
-    gtick'      = gtick + 1
-    gtick10     = gtick' `div` 10 + 1
-
-    -- path
-    -- gradually narrow path
-    pathwidth' = max pathwidthmin (half screenw - pathsteps `div` 10)
-    -- gradually accelerate
+    -- gravity - gradually accelerate
     pathspeed' = min pathspeedmax (pathspeed * pathspeedaccel)
-    -- slowly increase minimum speed ?
-    -- pathspeedbase' = pathspeedinit * 2 + float (pathsteps `div` 100)
-    pathspeedbase' = pathspeedbase
 
-    -- player
+    g' = g{gtick     = gtick+1
+          ,pathspeed = pathspeed'
+          }
+
+    -- has player crashed ?
     playercollision' =
       case path `atMay` int (playerHeight g) of
-        Just (PathLine l r) -> playerx <= l || playerx > r
         Nothing             -> False
-    
-    -- start restart timer if collision just happened
-    restarttimer' =
-      case (playercollision, playercollision') of
-        (False, True) -> creaBoolTimer restarttimerticks
-        _             -> tick restarttimer
-                          
-    -- update things depending on the situation
-    (rg', pathcenter', path', pathsteps', pathtimer', score', highscore', viewscroll')
-      | playercollision' =
-        -- player has crashed
-        (randomgen, pathcenter, path, pathsteps, pathtimer, score, max score highscore, viewscroll)
-      | isExpired pathtimer =
-        -- scroll the path
-       -- trace "scroll" $
-        let
-          -- choose path's next sideways displacement
-          -- maxdx = 1
-          maxdx = min (pathwidth' `div` 4) (pathsteps `div` 100 + 1)
-          (pathdx, rg') = getRandom (-maxdx,maxdx) randomgen
-          -- adjust the path center sideways within limits
-          pathcenter' =
-            case pathcenter + pathdx of
-              x | pathLeft  x pathwidth' < pathmin -> pathmin + half pathwidth'
-              x | pathRight x pathwidth' > pathmax -> pathmax - half pathwidth'
-              x -> x
-            where
-              pathLeft  center width = center - half width
-              pathRight center width = center + half width
-              pathmargin = max pathmarginmin (screenw `div` 40)
-              pathmin    = pathmargin
-              pathmax    = screenw - pathmargin
-          l = pathcenter' - half pathwidth'
-          r = pathcenter' + half pathwidth'
-          -- Pan the viewport up (player and walls move down) as speed increases,
-          -- as much as player Y min and max allow,
-          -- at most one row every few path steps, and only after screen has filled.
-          vs' =
-            if | length path < int screenh               -> viewscroll
-               | length path < int screenh               -> viewscroll
-               | vs > viewscroll, pathsteps `mod` 5 == 0 -> viewscroll+1
-               | vs < viewscroll, pathsteps `mod` 5 == 0 -> viewscroll-1
-               | otherwise                               -> viewscroll
-            where
-              vs = round $
-                   float (playerYMax screenh - playerYMin screenh)
-                   * (pathspeed'-pathspeedinit) / (pathspeedmax-pathspeedinit)
-        in
-          (rg'
-          ,pathcenter'
-          ,take (int screenh * 2) $ PathLine l r : path  -- extra offscreen lines are saved for viewscroll
-          ,pathsteps + 1
-          ,newPathTimer pathspeed'
-          ,score + if pathsteps >= playerHeight g then 1 else 0
-          ,highscore
-          ,vs'
-          )
-     | otherwise =
-       -- wait
-       -- trace "wait" $
-       (randomgen, pathcenter, path, pathsteps, tick pathtimer, score, highscore, viewscroll)
+        Just (PathLine l r) -> playerx <= l || playerx > r
 
   in
-    if | pause || playercollision ->
-         g{gtick           = gtick'
-          ,restarttimer    = restarttimer'
+    if
+      | pause ->  -- paused
+        g'
+
+      | not playercollision && playercollision' ->  -- newly crashed
+        g'{playercollision = True
+          ,highscore       = max score highscore
+          ,restarttimer    = reset restarttimer
           }
-       | otherwise ->
-         g{randomgen       = rg'
-          ,gtick           = gtick'
-          ,highscore       = highscore'
-          ,score           = score'
-          ,pathsteps       = pathsteps'
-          ,path            = path'
-          ,pathcenter      = pathcenter'
-          ,pathwidth       = pathwidth'
-          ,pathspeed       = pathspeed'
-          ,pathspeedbase   = pathspeedbase'
-          ,pathtimer       = pathtimer'
-          ,viewscroll      = viewscroll'
-          ,playercollision = playercollision'
-          ,restarttimer    = restarttimer'
-          }
+
+      | playercollision ->  -- previously crashed, awaiting restart
+        g'{restarttimer = tick restarttimer}
+
+      | isExpired pathtimer ->  -- time to step the path
+        let
+          -- narrowing - gradually narrow path
+          pathwidth' = max pathwidthmin (half screenw - pathsteps `div` 10)
+
+          -- hurryup - slowly increase minimum speed ?
+          -- pathspeedbase' = pathspeedinit * 2 + float (pathsteps `div` 100)
+          pathspeedbase' = pathspeedbase
+
+          -- morejagged - slowly increase max allowed sideways shift
+          -- maxdx = 1
+          maxdx = min (pathwidth' `div` 4) (pathsteps `div` 100 + 1)
+
+          -- choose path's next x position, with constraints:
+          -- keep the walls within bounds
+          (randomdx, randomgen') = getRandom (-maxdx,maxdx) randomgen
+          pathcenter' =
+            let
+              x = pathcenter + randomdx
+              (l,r) = pathWalls x pathwidth'
+              (pathmin,pathmax) = (margin, screenw - margin)
+                where
+                  margin = max pathmarginmin (screenw `div` 40)
+            in
+              if | l < pathmin -> pathmin + half pathwidth'
+                 | r > pathmax -> pathmax - half pathwidth'
+                 | otherwise   -> x
+
+          -- extend the path, discarding old lines,
+          -- except for an extra screenful that might be needed for speedpan
+          path' = take (int screenh * 2) $ PathLine l r : path
+            where
+              (l,r) = pathWalls pathcenter' pathwidth'
+          pathsteps' = pathsteps + 1
+
+          -- speedpan - as speed increases, pan the viewport up (player and walls move down)
+          -- with constraints:
+          -- only after screen has filled with path steps
+          -- keep player within configured player Y min/max
+          -- pan at most one row every few path steps
+          speedpan' =
+            if | length path' < int screenh      -> speedpan
+               | speedpan < idealpan, readytopan -> speedpan+1
+               | speedpan > idealpan, readytopan -> speedpan-1
+               | otherwise                       -> speedpan
+            where
+              readytopan = pathsteps' `mod` 5 == 0  -- for gradual panning - or make speedpan a Float ?
+              idealpan = round $
+                         float (playerYMax screenh - playerYMin screenh)
+                         * (pathspeed'-pathspeedinit) / (pathspeedmax-pathspeedinit)
+
+          -- score is depth (path steps) reached within the cave
+          score' | pathsteps >= playerHeight g = score + 1
+                 | otherwise                   = score
+
+        in
+          g'{randomgen       = randomgen'
+            ,score           = score'
+            ,path            = path'
+            ,pathcenter      = pathcenter'
+            ,pathwidth       = pathwidth'
+            ,pathspeed       = pathspeed'
+            ,pathspeedbase   = pathspeedbase'
+            ,pathtimer       = newPathTimer pathspeed'
+            ,pathsteps       = pathsteps'
+            ,speedpan        = speedpan'
+            ,playercollision = playercollision'
+            }
+
+      | otherwise ->  -- nothing special happening
+        g'{pathtimer = tick pathtimer}
+
 step g _ = g
 
 -- bot player
@@ -288,7 +287,7 @@ draw g@GameState{..} =
   & (1, screenw - 10) % drawScore score
   & (2, screenw - 10) % drawSpeed g
   -- & (3, screenw - 13) % drawStats g
-  & (playery+viewscroll, playerx) % cell c #bold #color hue Vivid
+  & (playery+speedpan, playerx) % cell c #bold #color hue Vivid
   where
     (c,hue) | playercollision = (crashchar,Red)
             | otherwise       = (playerchar,Blue)
@@ -309,7 +308,7 @@ drawTitle = hcat [
   ,cell ' '
   ]
 
-drawHelp GameState{..} = 
+drawHelp GameState{..} =
       (cell leftkey  #bold  ||| stringPlane " left ")
   === (cell rightkey #bold  ||| stringPlane " right ")
   === (cell 'p'      #bold  ||| if pause then stringPlane " pause " #bold else stringPlane " pause ")
@@ -325,10 +324,10 @@ drawStats g@GameState{..} =
       (stringPlane "    depth " ||| stringPlane (printf "%3d " (max 0 (pathsteps - playerHeight g))))
   === (stringPlane "    width " ||| stringPlane (printf "%3d " pathwidth))
   === (stringPlane " minspeed " ||| stringPlane (printf "%3.f " pathspeedbase))
-  -- === (stringPlane " speedpan " ||| stringPlane (printf "%3d " viewscroll))
+  -- === (stringPlane " speedpan " ||| stringPlane (printf "%3d " speedpan))
   -- === (stringPlane "    speed " ||| stringPlane (printf "%3.f " pathspeed))
 
-drawPath GameState{..} = vcat (map (drawPathLine screenw) $ reverse $ take (int screenh) $ drop (int viewscroll) path)
+drawPath GameState{..} = vcat (map (drawPathLine screenw) $ reverse $ take (int screenh) $ drop (int speedpan) path)
 
 drawPathLine screenw (PathLine left right) = stringPlane line
   where
@@ -357,6 +356,9 @@ playerHeight GameState{..} = screenh - playery - 1
 -- Calculate the player's minimum and maximum y coordinate.
 playerYMin screenh = round $ playerymin * float screenh
 playerYMax screenh = round $ playerymax * float screenh
+
+-- Calculate the path's left and right wall coordinates from center and width.
+pathWalls center width = (center - half width, center + half width)
 
 half :: Integral a => a -> a
 half = (`div` 2)
