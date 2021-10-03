@@ -39,11 +39,11 @@ import Text.Printf
 progname           = "caverunner"
 savefilename       = progname ++ ".save"
 (leftkey,rightkey) = (',','.')
-restarttimerticks  = secsToTicks 5
 wallchar           = '#'
 pathchar           = ' '
 crashchar          = '*'
 fps                = 60
+restartdelaysecs   = 5
 
 pathmarginmin      = 2
 pathwidthmin       = 0
@@ -128,7 +128,7 @@ newGameState w h rg hs = GameState {
   ,playerx         = half w
   ,playerchar      = 'V'
   ,playercollision = False
-  ,restarttimer    = creaBoolTimer restarttimerticks
+  ,restarttimer    = creaBoolTimer $ secsToTicks restartdelaysecs
   ,pause           = False
   ,exit            = False
   }
