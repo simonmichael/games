@@ -4,7 +4,7 @@ Small games, experiments and game dev notes.
 
 (Mostly in haskell)
 
-- [cave-runner](cave-runner) 2021
+- [caverunner](caverunner) 2021
 - [sm-breakout](https://github.com/simonmichael/sm-breakout) 2007, 2020
 - [metapong](https://github.com/simonmichael/metapong) 2019
 - [symon](https://github.com/simonmichael/symon) 2016

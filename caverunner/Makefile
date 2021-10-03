@@ -1,7 +1,7 @@
-PROG=cave.hs
+PROG=caverunner.hs
 
 # keep synced with script's stack header
-PACKAGES=--package random --package ansi-terminal-game --package linebreak --package timers-tick --package unidecode --package safe
+PACKAGES=--package random --package ansi-terminal-game --package linebreak --package timers-tick --package unidecode --package safe --package containers --package directory --package filepath
 
 ghc:
 	stack ghc $(PACKAGES) $(PROG) -- -threaded

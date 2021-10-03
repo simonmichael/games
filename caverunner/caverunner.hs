@@ -1,8 +1,8 @@
 #!/usr/bin/env stack 
--- stack --resolver=lts-18 script --optimize --verbosity=warn --ghc-options=-threaded --package random --package ansi-terminal-game --package linebreak --package timers-tick --package unidecode --package safe
+-- stack --resolver=lts-18 script --optimize --verbosity=warn --ghc-options=-threaded --package random --package ansi-terminal-game --package linebreak --package timers-tick --package unidecode --package safe --package containers --package directory --package filepath
 -------------------------------------------------------------------------------
 
--- cave2.hs - a one file haskell terminal game, using ansi-terminal-game.
+-- caverunner.hs - a one file haskell terminal game, using ansi-terminal-game.
 -- 
 -- stack is not required to run or compile this haskell script, but it
 -- makes things just work. On first running this script it may hang
@@ -22,14 +22,19 @@
 
 import Control.Monad
 import Data.List
+import qualified Data.Map as M
 import Data.Maybe
 import Debug.Trace
 import Safe
+import System.Directory
+import System.FilePath
 import Terminal.Game
 import Text.Printf
 
 -------------------------------------------------------------------------------
 
+progname           = "caverunner"
+savefilename       = progname ++ ".save"
 (leftkey,rightkey) = (',','.')
 restarttimerticks  = secsToTicks 5
 wallchar           = '#'
@@ -82,8 +87,8 @@ data GameState = GameState {
   ,screenh         :: Height
   ,randomgen       :: StdGen
   ,gtick           :: Integer    -- current game tick
-  ,highscore       :: Integer
-  ,score           :: Integer
+  ,highscore       :: Integer    -- high score for the current cave across all games
+  ,score           :: Integer    -- current score in this game
   ,speedpan        :: Height     -- current number of rows to pan the viewport down, based on current speed
   ,pathsteps       :: Integer    -- how many path segments have been traversed since game start
   ,path            :: [PathLine] -- recent path segments for display, newest/bottom-most first
@@ -131,16 +136,40 @@ data PathLine = PathLine Column Column  -- left wall, right wall
 
 main = do
   (w,h) <- displaySize
-  let
-    caveseed  = 1
-    randomgen = mkStdGen caveseed
-  playloop w h randomgen 0
+  highscores <- readHighScores
+  let caveseed = 1
+  playloop w h highscores caveseed
 
-playloop w h rg hs = do
-  GameState{score,highscore,exit} <- playGameS $ newGame w h rg hs
+playloop w h highscores caveseed = do
+  let
+    randomgen = mkStdGen caveseed
+    highscore = fromMaybe 0 $ M.lookup caveseed highscores
+  GameState{score,exit} <- playGameS $ newGame w h randomgen highscore
+  let
+    highscore'  = max score highscore
+    highscores' = M.insert caveseed highscore' highscores
+  when (highscore' > highscore) $ writeHighScores highscores'
   unless exit $ do
     (w',h') <- displaySize
-    playloop w' h' rg (max highscore score)
+    playloop w' h' highscores' caveseed
+
+-- a high score for each cave seed is stored in the save file
+readHighScores = do
+  savefile <- saveFilePath
+  exists <- doesFileExist savefile
+  if exists
+  then readDef M.empty <$> readFile savefile
+  else pure M.empty
+
+writeHighScores highscores = do
+  savefile <- saveFilePath
+  createDirectoryIfMissing True $ takeDirectory savefile
+  writeFile savefile $ show highscores
+
+saveFilePath :: IO FilePath
+saveFilePath = do
+  datadir <- getXdgDirectory XdgData progname
+  return $ datadir </> savefilename
 
 newGame screenw screenh rg hs =
   Game { gScreenWidth   = screenw,
@@ -343,14 +372,13 @@ drawTitle = hcat [
   ,cell 'a' #bold #color Blue Vivid
   ,cell 'v' #bold #color Yellow Vivid
   ,cell 'e' #bold #color Green Vivid
-  ,cell '-' #bold #color Red Vivid
-  ,cell 'r' #bold #color Blue Vivid
-  ,cell 'u' #bold #color Yellow Vivid
+  ,cell 'r' #bold #color Red Vivid
+  ,cell 'u' #bold #color Blue Vivid
+  ,cell 'n' #bold #color Yellow Vivid
   ,cell 'n' #bold #color Green Vivid
-  ,cell 'n' #bold #color Red Vivid
-  ,cell 'e' #bold #color Blue Vivid
-  ,cell 'r' #bold #color Yellow Vivid
-  ,cell '!' #bold #color Green Vivid
+  ,cell 'e' #bold #color Red Vivid
+  ,cell 'r' #bold #color Blue Vivid
+  ,cell '!' #bold #color Yellow Vivid
   ,cell ' '
   ]
 
