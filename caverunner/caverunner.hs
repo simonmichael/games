@@ -515,17 +515,16 @@ type Tone = (Hz, Ms)
 -- - on some systems, toot won't sound right unless sox is also installed.
 -- - sox generates stderr output, which we suppress.
 -- - there is a mastodon client also named toot, which won't play tones.
+-- - tone sequences are played with gaps between the tones.
 playTone :: Tone -> IO ExitCode
 playTone (hz,ms) = do
-  -- mtootappcmd <- findExecutable "toot.app"
-  -- mtootcmd <- findExecutable "toot"
-  -- case mtootappcmd <|> mtootcmd of
-  --   Just toot ->
-  --     hSilence [stderr] $
-  --     system $ toot ++ " -f " ++ show hz ++ " -l " ++ show ms
-  --   Nothing   -> return $ ExitFailure 1
-  let toot = "toot.app"
-  hSilence [stderr] $ system $ toot ++ " -f " ++ show hz ++ " -l " ++ show ms
+  mtootappcmd <- findExecutable "toot.app"
+  mtootcmd <- findExecutable "toot"
+  case mtootappcmd <|> mtootcmd of
+    Just toot ->
+      hSilence [stderr] $
+      system $ toot ++ " -f " ++ show hz ++ " -l " ++ show ms
+    Nothing   -> return $ ExitFailure 1
 
 -- Play a sequence of tones.
 -- This and the other multi-tone play functions return the first
@@ -540,7 +539,8 @@ playTones tones = do
 playTones' :: Ms -> [Hz] -> IO ExitCode
 playTones' t freqs = playTones [(f,t) | f <- freqs]
 
--- Play a sequence of tone frequencies all with the same duration N times.
+-- Play a sequence of tone frequencies all with the same duration, N times.
+repeatTones :: Int -> Ms -> [Hz] -> IO ExitCode
 repeatTones n t freqs = playTones' 100 $ concat $ replicate n freqs
 
 -------------------------------------------------------------------------------
