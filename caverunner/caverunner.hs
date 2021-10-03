@@ -1,5 +1,5 @@
 #!/usr/bin/env stack 
--- stack --resolver=lts-18 script --optimize --verbosity=warn --ghc-options=-threaded --package random --package ansi-terminal --package ansi-terminal-game --package linebreak --package timers-tick --package unidecode --package safe --package containers --package directory --package filepath
+-- stack --resolver=lts-18 script --optimize --verbosity=warn --ghc-options=-threaded --package ansi-terminal --package ansi-terminal-game --package linebreak --package timers-tick --package unidecode --package safe --package containers --package directory --package filepath
 --
 -- stack (https://www.fpcomplete.com/haskell/get-started) is the easy
 -- way to run this script reliably. On first run the script may seem
