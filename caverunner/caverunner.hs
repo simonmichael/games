@@ -472,7 +472,7 @@ drawTitle = hcat [
   ,cell ' '
   ]
 
-drawCave GameState{..} = stringPlane $ " cave "++show cave++" @ "++show (round pathspeedmax)
+drawCave GameState{..} = stringPlane $ " cave "++show cave++" @ "++show (round pathspeedmax) ++ " "
 
 drawHelp GameState{..} =
       (cell leftkey  #bold  ||| stringPlane " left ")
