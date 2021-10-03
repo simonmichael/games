@@ -117,6 +117,12 @@ pathspeedbrake = 1     -- multiply speed by this much each player movement (auto
 
 -------------------------------------------------------------------------------
 
+type Cave       = Int
+type MaxSpeed   = Int
+type Speed      = Float
+type Score      = Integer
+type HighScores = M.Map (Cave,MaxSpeed) Score
+
 data GameState = GameState {
    screenw         :: Width
   ,screenh         :: Height
@@ -130,9 +136,9 @@ data GameState = GameState {
   ,path            :: [PathLine] -- recent path segments for display, newest/bottom-most first
   ,pathwidth       :: Width      -- current path width
   ,pathcenter      :: Column     -- current path center
-  ,pathspeed       :: Float      -- current speed of path scroll in steps/s, must be <= fps
-  ,pathspeedmin    :: Float      -- current minimum speed player can brake to
-  ,pathspeedmax    :: Float      -- maximum speed player can accelerate to (an integer), must be <= fps
+  ,pathspeed       :: Speed      -- current speed of path scroll in steps/s, must be <= fps
+  ,pathspeedmin    :: Speed      -- current minimum speed player can brake to
+  ,pathspeedmax    :: Speed      -- maximum speed player can accelerate to (an integer), must be <= fps
   ,pathtimer       :: Timed Bool -- delay before next path scroll
   ,playery         :: Row
   ,playerx         :: Column
@@ -171,10 +177,6 @@ newGameState w h cave rg hs maxspeed = GameState {
 
 data PathLine = PathLine Column Column  -- left wall, right wall
 
-type HighScores = M.Map (Cave,MaxSpeed) Score
-type Cave       = Int
-type MaxSpeed   = Int
-type Score      = Integer
 
 -------------------------------------------------------------------------------
 
@@ -191,11 +193,11 @@ main = do
         []    -> (defcave, defspeed)
         [c]   -> (readDef (caveerr c) c, defspeed)
         [c,s] -> (readDef (caveerr c) c, readDef (speederr s) s)
-        _     -> error "too many arguments, please see --help"
+        _     -> err "too many arguments, please see --help"
         where
-          caveerr a = errorWithoutStackTrace $
+          caveerr a = err $
             "CAVE should be a natural number (received "++a++"), see --help)"
-          speederr a = errorWithoutStackTrace $
+          speederr a = err $
             "SPEED should be 1-60 (received "++a++"), see --help)"
   playloop w h highscores cave speed
 
@@ -205,28 +207,33 @@ exitWithUsage w h = do
   putStr $ usage w h
   exitSuccess  
 
+playloop :: Width -> Height -> HighScores -> Cave -> Float -> IO ()
 playloop w h highscores caveseed maxspeed = do
   let
     randomgen = mkStdGen caveseed
-    highscore = fromMaybe 0 $ M.lookup (caveseed,maxspeed) highscores
+    highscore = fromMaybe 0 $ M.lookup (caveseed, round maxspeed) highscores
     t = 100
   repeatTones 2 100 [100,200,400]
   GameState{score,exit} <- playGameS $ newGame w h caveseed randomgen highscore maxspeed
   let
     highscore'  = max score highscore
-    highscores' = M.insert (caveseed,maxspeed) highscore' highscores
+    highscores' = M.insert (caveseed, round maxspeed) highscore' highscores
   when (highscore' > highscore) $ writeHighScores highscores'
   unless exit $ do
     (w',h') <- displaySize
     playloop w' h' highscores' caveseed maxspeed
 
 -- a high score for each cave seed is stored in the save file
+readHighScores :: IO HighScores
 readHighScores = do
   savefile <- saveFilePath
   exists <- doesFileExist savefile
   if exists
-  then readDef M.empty <$> readFile savefile
+  then
+    readDef (err $ "could not read high scores from\n"++savefile++"\nperhaps the format has changed, please move it out of the way")
+    <$> readFile savefile
   else pure M.empty
+
 
 writeHighScores highscores = do
   savefile <- saveFilePath
@@ -569,3 +576,4 @@ float = fromInteger
 int :: Integer -> Int
 int = fromIntegral
 
+err = errorWithoutStackTrace
