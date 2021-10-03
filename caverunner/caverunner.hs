@@ -28,6 +28,7 @@ import System.Exit
 import System.FilePath
 import System.IO
 import System.IO.Silently
+import System.IO.Unsafe (unsafePerformIO)
 import System.Process
 import Terminal.Game
 import Text.Printf
@@ -54,16 +55,16 @@ usage w h = banner ++ unlines [
   ,"$ ./caverunner -h|--help       # show this help"
   ,"$ ./caverunner [CAVE [SPEED]]"
   ,""
-  ,"CAVE selects a cave to run (default 1). They are currently not much different."
+  ,"CAVE selects a cave to run (default 1). "
   ,"Each has its own high score, the maximum depth achieved, for each max speed."
-  ,""
-  ,"SPEED limits your maximum dive speed, 1-60 fathoms per second (default 15)."
-  ,"High speeds make survival difficult, but increase the glory!"
-  ,""
   ,"In terminals >=80 wide, cave layout is consistent, making scores comparable."
   ,"Smaller windows are not guaranteed to produce the same cave."
   ,"80x25 is preferred by competition pilots. Your current terminal is "++show w++"x"++show h++"."
   ,""
+  ,"SPEED limits your maximum dive speed, 1-60 fathoms per second (default 15)."
+  ,"High speeds make survival difficult, but increase the glory!"
+  ,""
+  ,"https://github.com/vareille/toot (and maybe sox) in PATH enables basic sounds."
   ]
 
 -- Keyboard repeat rate configuration tips:
@@ -208,6 +209,8 @@ playloop w h highscores caveseed maxspeed = do
   let
     randomgen = mkStdGen caveseed
     highscore = fromMaybe 0 $ M.lookup (caveseed,maxspeed) highscores
+    t = 100
+  repeatTones 2 100 [100,200,400]
   GameState{score,exit} <- playGameS $ newGame w h caveseed randomgen highscore maxspeed
   let
     highscore'  = max score highscore
@@ -282,6 +285,7 @@ step g@GameState{..} Tick =
         g'
 
       | not playercollision && playercollision' ->  -- newly crashed
+        unsafePerformIO (playTone (100,1000)) `seq` -- XXX sound plays before crash is drawn
         g'{playercollision = True
           ,highscore       = max score highscore
           ,restarttimer    = reset restarttimer
@@ -427,7 +431,7 @@ draw g@GameState{..} =
   & (1, scorex) % drawScore score
   & (2, scorex) % drawSpeed g
   -- & (3, screenw - 13) % drawStats g
-  & (playery+speedpan, playerx) % cell c #bold #color hue Vivid
+  & (playery+speedpan, playerx) % drawPlayer g
   where
     titlew     = 12
     cavew      = fromIntegral $ 10 + length (show cave) + length (show pathspeedmax)
@@ -440,8 +444,11 @@ draw g@GameState{..} =
     highscorex = min (scorex - highscorew) (3 * screenw `div` 4 - highscorew)
     cavex      = min (highscorex - cavew) (screenw `div` 4)
 
-    (c,hue) | playercollision = (crashchar,Red)
-            | otherwise       = (playerchar,Blue)
+drawPlayer GameState{..} =
+  cell char #bold #color hue Vivid
+  where
+    (char, hue) | playercollision = (crashchar,Red)
+                | otherwise       = (playerchar,Blue)
 
 drawTitle = hcat [
    cell 'c' #bold #color Red Vivid
@@ -491,6 +498,47 @@ drawPathLine screenw (PathLine left right) = stringPlane line
 
 -------------------------------------------------------------------------------
 
+type Hz = Float
+type Ms = Int
+type Tone = (Hz, Ms)
+
+-- Play a tone using toot (https://github.com/vareille/toot), if it's
+-- found in PATH, returning its exit code. When it's not in PATH,
+-- return ExitFailure 1.
+-- Limitations:
+-- - on some systems, toot won't sound right unless sox is also installed.
+-- - sox generates stderr output, which we suppress.
+-- - there is a mastodon client also named toot, which won't play tones.
+playTone :: Tone -> IO ExitCode
+playTone (hz,ms) = do
+  -- mtootappcmd <- findExecutable "toot.app"
+  -- mtootcmd <- findExecutable "toot"
+  -- case mtootappcmd <|> mtootcmd of
+  --   Just toot ->
+  --     hSilence [stderr] $
+  --     system $ toot ++ " -f " ++ show hz ++ " -l " ++ show ms
+  --   Nothing   -> return $ ExitFailure 1
+  let toot = "toot.app"
+  hSilence [stderr] $ system $ toot ++ " -f " ++ show hz ++ " -l " ++ show ms
+
+-- Play a sequence of tones.
+-- This and the other multi-tone play functions return the first
+-- non-zero exit code or ExitSuccess.
+playTones :: [Tone] -> IO ExitCode
+playTones tones = do
+  codes <- mapM playTone tones
+  let code = fromMaybe ExitSuccess $ headMay $ filter (/= ExitSuccess) codes
+  return code
+
+-- Play a sequence of tone frequencies all with the same duration.
+playTones' :: Ms -> [Hz] -> IO ExitCode
+playTones' t freqs = playTones [(f,t) | f <- freqs]
+
+-- Play a sequence of tone frequencies all with the same duration N times.
+repeatTones n t freqs = playTones' 100 $ concat $ replicate n freqs
+
+-------------------------------------------------------------------------------
+
 -- Convert seconds to game ticks based on global frame rate.
 secsToTicks :: Float -> Integer
 secsToTicks = round . (* float fps)
@@ -521,20 +569,3 @@ float = fromInteger
 int :: Integer -> Int
 int = fromIntegral
 
-type Hz = Int
-type Ms = Int
-type Tone = (Hz, Ms)
-
--- Play a tone using toot or toot.app, if it's found in PATH,
--- returning its exit code. On some systems, tones won't sound right
--- unless sox is also installed. sox generates stderr output, so that
--- is suppressed. When toot is not in PATH, returns ExitFailure 1.
-playTone :: Tone -> IO ExitCode
-playTone (hz,ms) = do
-  mtootcmd <- findExecutable "toot"
-  mtootappcmd <- findExecutable "toot.app"
-  case mtootcmd <|> mtootappcmd of
-    Just toot ->
-      hSilence [stderr] $
-      system $ toot ++ " -f " ++ show hz ++ " -l " ++ show ms
-    Nothing   -> return $ ExitFailure 1
