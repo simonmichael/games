@@ -310,6 +310,7 @@ step g@GameState{..} Tick =
           speedpan' = stepSpeedpan g' pathsteps' pathspeed' path'
           score'    = stepScore    g' pathsteps'
         in
+          (if pathsteps' `mod` 100 == 0 then (unsafePerformIO (playTone (400,70)) `seq`) else id) $
           g'{randomgen       = randomgen'
             ,score           = score'
             ,speedpan        = speedpan'
