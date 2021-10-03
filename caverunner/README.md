@@ -5,7 +5,7 @@
 \___/\__,_/ |___/\___/_/   \__,_/_/ /_/_/ /_/\___/_/
 ```
 
-A simple one-file terminal game in Haskell, built with ansi-terminal-game.
+A simple one-file cross-platform terminal game in Haskell, built with ansi-terminal-game and stack.
 
 ![screencast](caverunner.anim.gif)
 
@@ -22,6 +22,10 @@ the haskell packages mentioned in the header, and a suitable GHC
 version (eg 8.10), then compile the script.
 
 See also `./caverunner.hs --help`.
+
+This game has very basic (retro!) sound effects, which in theory should work everywhere.
+To hear them, install [toot](https://github.com/vareille/toot), and maybe
+[sox](https://sox.sourceforge.net) as well), in your PATH.
 
 ## Dev notes
 
