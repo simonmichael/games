@@ -3,6 +3,9 @@ PROG=cave.hs
 # keep synced with script's stack header
 PACKAGES=--package random --package ansi-terminal-game --package linebreak --package timers-tick --package unidecode --package safe
 
+ghc:
+	stack ghc $(PACKAGES) $(PROG) -- -threaded
+
 ghci:
 	stack ghci $(PACKAGES) $(PROG)
 
