@@ -41,13 +41,13 @@ usage w h = unlines [
   ,"Usage:"
   ,"$ ./caverunner[.hs] ...        # run the game [& update the caverunner binary]"
   ,"$ ./caverunner -h|--help       # show this help"
-  ,"$ ./caverunner [SPEED [CAVE]]" 
+  ,"$ ./caverunner [CAVE [SPEED]]"
+  ,""
+  ,"CAVE selects a cave to run (default 1). They are currently not much different."
+  ,"Each has its own high score, the maximum depth achieved, for each max speed."
   ,""
   ,"SPEED limits your maximum dive speed, 1-60 fathoms per second (default 15)."
   ,"High speeds make survival difficult, but increase the glory!"
-  ,""
-  ,"CAVE selects a cave to run (default 1). They are currently not much different."
-  ,"Each has its own high score, for each max speed (the maximum depth achieved)."
   ,""
   ,"In terminals >=80 wide, cave layout is consistent, making scores comparable."
   ,"Smaller windows are not guaranteed to produce the same cave."
@@ -172,20 +172,20 @@ main = do
   args <- getArgs
   when ("-h" `elem` args || "--help" `elem` args) $ exitWithUsage w h
   let
-    defspeed = 15
     defcave  = 1
-    (speed, cave) =
+    defspeed = 15
+    (cave, speed) =
       case args of
-        []    -> (defspeed, defcave)
-        [s]   -> (readDef (speederr s) s, defcave)
-        [s,c] -> (readDef (speederr s) s, readDef (caveerr c) c)
+        []    -> (defcave, defspeed)
+        [c]   -> (readDef (caveerr c) c, defspeed)
+        [c,s] -> (readDef (caveerr c) c, readDef (speederr s) s)
         _     -> error "too many arguments, please see --help"
         where
-          speederr a = errorWithoutStackTrace $
-            "SPEED should be 1-60 (received "++a++"), see --help)"
           caveerr a = errorWithoutStackTrace $
             "CAVE should be a natural number (received "++a++"), see --help)"
-  playloop w h highscores speed cave
+          speederr a = errorWithoutStackTrace $
+            "SPEED should be 1-60 (received "++a++"), see --help)"
+  playloop w h highscores cave speed
 
 exitWithUsage w h = do
   clearScreen
@@ -193,7 +193,7 @@ exitWithUsage w h = do
   putStr $ usage w h
   exitSuccess  
 
-playloop w h highscores maxspeed caveseed = do
+playloop w h highscores caveseed maxspeed = do
   let
     randomgen = mkStdGen caveseed
     highscore = fromMaybe 0 $ M.lookup (caveseed,maxspeed) highscores
@@ -204,7 +204,7 @@ playloop w h highscores maxspeed caveseed = do
   when (highscore' > highscore) $ writeHighScores highscores'
   unless exit $ do
     (w',h') <- displaySize
-    playloop w' h' highscores' maxspeed caveseed
+    playloop w' h' highscores' caveseed maxspeed
 
 -- a high score for each cave seed is stored in the save file
 readHighScores = do
