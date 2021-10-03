@@ -88,22 +88,20 @@ pathwidthdurations = [
   ,( 2,3)
   ]
 
--- pathspeedinit  = 2               -- initial path scrolling speed
--- pathspeedaccel = 1.005           -- multiply speed by this much each game tick
--- pathspeedbrake = 0.7             -- multiply speed by this much each player movement (autobraking)
--- -- player's minimum/maximum y position relative to screen height.
--- -- if different, view panning is enabled.
+pathspeedinit  = 1     -- initial path scrolling speed
+pathspeedaccel = 1.01  -- multiply speed by this much each game tick (gravity)
+pathspeedbrake = 1     -- multiply speed by this much each player movement (autobraking)
+(playerymin, playerymax) = (0.4, 0.4)  -- player bounds relative to screen height, different bounds enables speed panning
+
+-- pathspeedinit  = 2            
+-- pathspeedaccel = 1.005         
+-- pathspeedbrake = 0.7           
 -- (playerymin, playerymax) = (0.2, 0.6)
 
 -- pathspeedinit  = 4
 -- pathspeedaccel = 1.001
 -- pathspeedbrake = 0.8
 -- (playerymin, playerymax) = (0.4, 0.4)
-
-pathspeedinit  = 1
-pathspeedaccel = 1.01
-pathspeedbrake = 1
-(playerymin, playerymax) = (0.4, 0.4)
 
 -------------------------------------------------------------------------------
 
@@ -121,7 +119,7 @@ data GameState = GameState {
   ,pathwidth       :: Width      -- current path width
   ,pathcenter      :: Column     -- current path center
   ,pathspeed       :: Float      -- current speed of path scroll in steps/s, must be <= fps
-  ,pathspeedbase   :: Float      -- current minimum speed player can brake to
+  ,pathspeedmin    :: Float      -- current minimum speed player can brake to
   ,pathspeedmax    :: Float      -- maximum speed player can accelerate to (an integer), must be <= fps
   ,pathtimer       :: Timed Bool -- delay before next path scroll
   ,playery         :: Row
@@ -147,7 +145,7 @@ newGameState w h cave rg hs maxspeed = GameState {
   ,pathwidth       = min 40 $ half w
   ,pathcenter      = half w
   ,pathspeed       = pathspeedinit
-  ,pathspeedbase   = pathspeedinit * 2
+  ,pathspeedmin    = pathspeedinit * 2
   ,pathspeedmax    = maxspeed
   ,pathtimer       = newPathTimer pathspeedinit
   ,playery         = playerYMin h
@@ -244,11 +242,11 @@ step g@GameState{..} (KeyPress k)
   | k `elem` "p "         = g { pause = True }
   | k == leftkey,  not (playercollision || pause) =
       g { playerx = max 1 (playerx - 1)
-        , pathspeed = max pathspeedbase (pathspeed * pathspeedbrake)
+        , pathspeed = max pathspeedmin (pathspeed * pathspeedbrake)
         }
   | k == rightkey, not (playercollision || pause) =
       g { playerx = min screenw (playerx + 1)
-        , pathspeed = max pathspeedbase (pathspeed * pathspeedbrake)
+        , pathspeed = max pathspeedmin (pathspeed * pathspeedbrake)
         }
   | otherwise = g
 
@@ -284,7 +282,7 @@ step g@GameState{..} Tick =
       | isExpired pathtimer ->  -- time to step the path
         let
           (pathsteps',
-           pathspeedbase',
+           pathspeedmin',
            pathwidth',
            randomgen',
            pathcenter',
@@ -300,7 +298,7 @@ step g@GameState{..} Tick =
             ,pathwidth       = pathwidth'
             ,pathcenter      = pathcenter'
             ,pathspeed       = pathspeed'
-            ,pathspeedbase   = pathspeedbase'
+            ,pathspeedmin    = pathspeedmin'
             ,pathtimer       = newPathTimer pathspeed'
             ,playercollision = playercollision'
             }
@@ -310,7 +308,7 @@ step g@GameState{..} Tick =
 
 stepPath GameState{..} =
   (pathsteps'
-  ,pathspeedbase'
+  ,pathspeedmin'
   ,pathwidth'
   ,randomgen'
   ,pathcenter'
@@ -319,8 +317,8 @@ stepPath GameState{..} =
     pathsteps' = pathsteps + 1
 
     -- hurryup - slowly increase minimum speed ?
-    -- pathspeedbase' = pathspeedinit * 2 + float (pathsteps `div` 100)
-    pathspeedbase' = pathspeedbase
+    -- pathspeedmin' = pathspeedinit * 2 + float (pathsteps `div` 100)
+    pathspeedmin' = pathspeedmin
 
     -- narrowing - gradually narrow path
     pathwidth'
@@ -466,7 +464,7 @@ drawSpeed g@GameState{..} = stringPlane " speed " ||| stringPlane (printf "%4.f 
 drawStats g@GameState{..} =
       (stringPlane "    depth " ||| stringPlane (printf "%3d " (max 0 (pathsteps - playerHeight g))))
   === (stringPlane "    width " ||| stringPlane (printf "%3d " pathwidth))
-  === (stringPlane " minspeed " ||| stringPlane (printf "%3.f " pathspeedbase))
+  === (stringPlane " minspeed " ||| stringPlane (printf "%3.f " pathspeedmin))
   -- === (stringPlane " speedpan " ||| stringPlane (printf "%3d " speedpan))
   -- === (stringPlane "    speed " ||| stringPlane (printf "%3.f " pathspeed))
 
