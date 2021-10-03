@@ -32,9 +32,16 @@ import Text.Printf
 
 progname  = "caverunner"
 version   = "1.0alpha"
-usage w h = unlines [
+banner = unlines [
+   "  _________ __   _____  _______  ______  ____  ___  _____"
+  ," / ___/ __ `/ | / / _ \\/ ___/ / / / __ \\/ __ \\/ _ \\/ ___/"
+  ,"/ /__/ /_/ /| |/ /  __/ /  / /_/ / / / / / / /  __/ /    "
+  ,"\\___/\\__,_/ |___/\\___/_/   \\__,_/_/ /_/_/ /_/\\___/_/     "
+  ]
+usage w h = banner ++ unlines [
     ------------------------------------------------------------------------------80
-   "caverunner "++version++" - a small terminal game by Simon Michael."
+   ""
+  ,"caverunner "++version++" - a small terminal game by Simon Michael."
   ,"Thrillseeking drone pilots dive the solar system's caves, competing for glory."
   ,"Fly fast, avoid the walls!"
   ,""
