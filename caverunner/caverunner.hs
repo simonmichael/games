@@ -213,7 +213,7 @@ step g@GameState{..} Tick =
 
     -- has player crashed ?
     playercollision' =
-      case path `atMay` int (playerHeight g) of
+      case path `atMay` int (playerHeight g - 1) of
         Nothing             -> False
         Just (PathLine l r) -> playerx <= l || playerx > r
 
