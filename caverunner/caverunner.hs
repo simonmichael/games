@@ -1,5 +1,5 @@
 #!/usr/bin/env stack 
--- stack --resolver=lts-18 script --optimize --verbosity=warn --ghc-options=-threaded --package ansi-terminal --package ansi-terminal-game --package linebreak --package timers-tick --package unidecode --package safe --package containers --package directory --package filepath
+-- stack --resolver=lts-18 script --optimize --verbosity=warn --ghc-options=-threaded --package ansi-terminal --package ansi-terminal-game --package linebreak --package timers-tick --package unidecode --package safe --package containers --package directory --package filepath --package silently
 --
 -- stack (https://www.fpcomplete.com/haskell/get-started) is the easy
 -- way to run this script reliably. On first run the script may seem
@@ -14,6 +14,7 @@
 {-# OPTIONS_GHC -Wno-missing-signatures -Wno-unused-imports #-}
 {-# LANGUAGE MultiWayIf, NamedFieldPuns, RecordWildCards, ScopedTypeVariables #-}
 
+import Control.Applicative
 import Control.Monad
 import Data.List
 import qualified Data.Map as M
@@ -25,6 +26,9 @@ import System.Directory
 import System.Environment
 import System.Exit
 import System.FilePath
+import System.IO
+import System.IO.Silently
+import System.Process
 import Terminal.Game
 import Text.Printf
 
@@ -516,3 +520,21 @@ float = fromInteger
 
 int :: Integer -> Int
 int = fromIntegral
+
+type Hz = Int
+type Ms = Int
+type Tone = (Hz, Ms)
+
+-- Play a tone using toot or toot.app, if it's found in PATH,
+-- returning its exit code. On some systems, tones won't sound right
+-- unless sox is also installed. sox generates stderr output, so that
+-- is suppressed. When toot is not in PATH, returns ExitFailure 1.
+playTone :: Tone -> IO ExitCode
+playTone (hz,ms) = do
+  mtootcmd <- findExecutable "toot"
+  mtootappcmd <- findExecutable "toot.app"
+  case mtootcmd <|> mtootappcmd of
+    Just toot ->
+      hSilence [stderr] $
+      system $ toot ++ " -f " ++ show hz ++ " -l " ++ show ms
+    Nothing   -> return $ ExitFailure 1
