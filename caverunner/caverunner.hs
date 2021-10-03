@@ -2,7 +2,9 @@
 -- stack --resolver=lts-18 script --optimize --verbosity=warn --ghc-options=-threaded --package random --package ansi-terminal-game --package linebreak --package timers-tick --package unidecode --package safe --package containers --package directory --package filepath
 -------------------------------------------------------------------------------
 
--- caverunner.hs - a one file haskell terminal game, using ansi-terminal-game.
+-- caverunner.hs [CAVE] - a one file haskell terminal game, using ansi-terminal-game.
+--
+-- CAVE is the number of a cave to run (default: 1).
 -- 
 -- stack is not required to run or compile this haskell script, but it
 -- makes things just work. On first running this script it may hang
@@ -27,6 +29,7 @@ import Data.Maybe
 import Debug.Trace
 import Safe
 import System.Directory
+import System.Environment
 import System.FilePath
 import Terminal.Game
 import Text.Printf
@@ -137,7 +140,9 @@ data PathLine = PathLine Column Column  -- left wall, right wall
 main = do
   (w,h) <- displaySize
   highscores <- readHighScores
-  let caveseed = 1
+  args <- getArgs
+  let caveseed = fromMaybe 1 $ readDef err =<< headMay args
+        where err = errorWithoutStackTrace "if provided, the CAVE argument should be an integer."
   playloop w h highscores caveseed
 
 playloop w h highscores caveseed = do
