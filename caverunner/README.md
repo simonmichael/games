@@ -11,8 +11,8 @@ A simple one-file cross-platform terminal game in Haskell, built with ansi-termi
 
 ## Install
 
-This game is shipped as a single-file script that will run reliably if
-you have [stack](https://www.fpcomplete.com/haskell/get-started) in
+This game is shipped as a single-file script that will run relatively reliably
+if you have [stack](https://www.fpcomplete.com/haskell/get-started) in
 your PATH. On first run it may seem to hang (perhaps for minutes) if
 it needs to download GHC (change its header to --verbosity=info if you
 need to see progress).
