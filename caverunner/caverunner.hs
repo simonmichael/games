@@ -211,7 +211,7 @@ playloop w h highscores caveseed maxspeed = do
     randomgen = mkStdGen caveseed
     highscore = fromMaybe 0 $ M.lookup (caveseed, round maxspeed) highscores
     t = 100
-  repeatTones 2 100 [100,200,400]
+  repeatTones' 2 100 [100,200,400]
   GameState{score,exit} <- playGameS $ newGame w h caveseed randomgen highscore maxspeed
   let
     highscore'  = max score highscore
@@ -504,44 +504,53 @@ drawPathLine screenw (PathLine left right) = stringPlane line
 
 -------------------------------------------------------------------------------
 
+-- A sound tone (usually a sine wave) with a given pitch and duration.
+type Tone = (Hz, Ms)
 type Hz = Float
 type Ms = Int
-type Tone = (Hz, Ms)
+
+-- Tone playing functions, blocking.
 
 -- Play a tone using toot (https://github.com/vareille/toot), if it's
--- found in PATH, returning its exit code. When it's not in PATH,
+-- found in PATH, returning its exit code. When toot is not in PATH,
 -- return ExitFailure 1.
 -- Limitations:
--- - on some systems, toot won't sound right unless sox is also installed.
+-- - This blocks while the sound is playing.
+-- - On some systems, toot won't sound right unless sox is also installed.
 -- - sox generates stderr output, which we suppress.
--- - there is a mastodon client also named toot, which won't play tones.
--- - tone sequences are played with gaps between the tones.
+-- - There is a mastodon client also named toot, which won't play tones.
+-- - Tone sequences are played with a gap between tones.
 playTone :: Tone -> IO ExitCode
 playTone (hz,ms) = do
-  mtootappcmd <- findExecutable "toot.app"
-  mtootcmd <- findExecutable "toot"
-  case mtootappcmd <|> mtootcmd of
+  mtootapp <- findExecutable "toot.app"
+  mtoot    <- findExecutable "toot"
+  case mtootapp <|> mtoot of
     Just toot ->
       hSilence [stderr] $
       system $ toot ++ " -f " ++ show hz ++ " -l " ++ show ms
     Nothing   -> return $ ExitFailure 1
 
 -- Play a sequence of tones.
--- This and the other multi-tone play functions return the first
--- non-zero exit code or ExitSuccess.
+-- This and the other multi-tone functions return the first non-zero exit code,
+-- or ExitSuccess.
 playTones :: [Tone] -> IO ExitCode
 playTones tones = do
   codes <- mapM playTone tones
   let code = fromMaybe ExitSuccess $ headMay $ filter (/= ExitSuccess) codes
   return code
 
--- Play a sequence of tone frequencies all with the same duration.
+-- Play a sequence of tones with the same duration.
 playTones' :: Ms -> [Hz] -> IO ExitCode
 playTones' t freqs = playTones [(f,t) | f <- freqs]
 
--- Play a sequence of tone frequencies all with the same duration, N times.
-repeatTones :: Int -> Ms -> [Hz] -> IO ExitCode
-repeatTones n t freqs = playTones' 100 $ concat $ replicate n freqs
+-- Play a sequence of tones, N times.
+repeatTones :: Int -> [Tone] -> IO ExitCode
+repeatTones n tones = playTones $ concat $ replicate n tones
+
+-- Play a sequence of tones with the same duration, N times.
+repeatTones' :: Int -> Ms -> [Hz] -> IO ExitCode
+repeatTones' n t freqs = playTones' t $ concat $ replicate n freqs
+
 
 -------------------------------------------------------------------------------
 
