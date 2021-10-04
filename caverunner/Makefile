@@ -1,7 +1,18 @@
 PROG=caverunner.hs
 
-# keep synced with script's stack header
-PACKAGES=--package ansi-terminal --package ansi-terminal-game --package linebreak --package timers-tick --package unidecode --package safe --package containers --package directory --package filepath --package process --package silently
+# keep synced with script's header
+PACKAGES=\
+  --package ansi-terminal-game\
+  --package ansi-terminal\
+  --package containers\
+  --package directory\
+  --package filepath\
+  --package linebreak\
+  --package process\
+  --package safe\
+  --package silently\
+  --package timers-tick\
+  --package unidecode\
 
 ghc:
 	stack ghc $(PACKAGES) $(PROG) -- -threaded

@@ -1,6 +1,19 @@
 #!/usr/bin/env stack 
--- stack --resolver=lts-18 script --optimize --verbosity=warn --ghc-options=-threaded --package ansi-terminal --package ansi-terminal-game --package linebreak --package timers-tick --package unidecode --package safe --package containers --package directory --package filepath --package silently
---
+{- stack script --optimize --verbosity=warn
+  --ghc-options=-threaded
+  --resolver=lts-18
+  --package ansi-terminal
+  --package ansi-terminal-game
+  --package containers
+  --package directory
+  --package filepath
+  --package linebreak
+  --package process
+  --package safe
+  --package silently
+  --package timers-tick
+  --package unidecode
+-}
 -- stack (https://www.fpcomplete.com/haskell/get-started) is the easy
 -- way to run this script reliably. On first run the script may seem
 -- to hang (perhaps for minutes) while downloading and unpacking GHC;

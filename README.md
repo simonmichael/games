@@ -45,14 +45,17 @@ These notes and examples aim to help.
 **Minimising packaging boilerplate and complex/unreliable install instructions**\
 Use a [stack script with `script` command](https://docs.haskellstack.org/en/stable/GUIDE/#script-interpreter).
 
-**Getting stack script options just right**
+**Getting stack script header just right**
+
 - Specify all extra packages (packages other than `base` that you import from)
-  with `--package` options in stack options line.
+  with `--package` options in the stack script header.
   If you forget any, the script may run for you but fail for others.
+
 - If they depend on packages not in stackage, you must also mention each of those
   (the error message will list them.)
-- Remember stack options must be all on one line. 
-  Follow-on lines will be silently ignored.
+
+- Use a block comment (`{- -}`) so that you can write packages and options on multiple lines.
+  (A line comment (`--`) will work only for one line.)
 
 **Avoiding apparent hang when ghc is installed on first run**\
 Add `--verbosity=info` to stack options line to show ghc install progress
@@ -68,10 +71,13 @@ Use `script --compile` in stack options line
 (ansi-terminal-game, etc.):  add `--ghc-options=-threaded` to stack options line
 
 **Providing ready-to-run binaries that don't require the user to have `stack` or other haskell tools**
+
 - set up Github CI workflows to build binary artifacts on the main platforms 
   (and ideally, statically link the GNU/Linux binary);
   add those to a Github release for stable download url.
+
 - mac: get your app packaged in homebrew
+
 - etc.
 
 **Providing screenshots/screencasts**\
