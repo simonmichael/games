@@ -454,7 +454,7 @@ draw g@GameState{..} =
     blankPlane screenw screenh
   & (max 1 (screenh - toInteger (length path)), 1) % drawPath g
   & (1, 1)          % blankPlane screenw 1
-  & (1, titlex)     % drawTitle
+  & (1, titlex)     % drawTitle g
   & (1, cavex)      % drawCave g
   & (3, helpx)      % drawHelp g
   & (1, highscorex) % drawHighScore g
@@ -480,20 +480,12 @@ drawPlayer GameState{..} =
     (char, hue) | gameover  = (crashchar,Red)
                 | otherwise = (playerchar,Blue)
 
-drawTitle = hcat [
-   cell 'c' #bold #color Red Vivid
-  ,cell 'a' #bold #color Blue Vivid
-  ,cell 'v' #bold #color Yellow Vivid
-  ,cell 'e' #bold #color Green Vivid
-  ,cell 'r' #bold #color Red Vivid
-  ,cell 'u' #bold #color Blue Vivid
-  ,cell 'n' #bold #color Yellow Vivid
-  ,cell 'n' #bold #color Green Vivid
-  ,cell 'e' #bold #color Red Vivid
-  ,cell 'r' #bold #color Blue Vivid
-  ,cell '!' #bold #color Yellow Vivid
-  ,cell ' '
-  ]
+drawTitle GameState{..} =
+  hcat $
+  map bold $
+  map (\(a,b) -> a b) $
+  zip (drop (int pathsteps `div` 3 `mod` 4) $ cycle [color Red Vivid, color Green Vivid, color Blue Vivid, color Yellow Vivid]) $
+  map cell (progname++"!")
 
 drawCave GameState{..} = stringPlane $ " cave "++show cave++" @ "++show (round pathspeedmax) ++ " "
 
