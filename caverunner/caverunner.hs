@@ -491,9 +491,15 @@ drawHelp GameState{..} =
   === (cell 'p'      #bold  ||| if pause then stringPlane " pause " #bold else stringPlane " pause ")
   === (cell 'q'      #bold  ||| if exit then stringPlane " quit " #bold else stringPlane " quit ")
 
-drawHighScore score = stringPlane " high score " ||| stringPlane (printf "%04d " score) #bold
+drawHighScore GameState{..} =
+  stringPlane " high score " ||| (stringPlane (printf "%04d " highscore) & maybebold)
+  where
+    maybebold = if gameover && highscore==score then (#bold) else id
 
-drawScore score = stringPlane " score " ||| stringPlane (printf "%04d " score) #bold
+drawScore GameState{..} =
+  stringPlane " score " ||| (stringPlane (printf "%04d " score) & maybebold)
+  where
+    maybebold = if score >= highscore then (#bold) else id
 
 drawSpeed g@GameState{..} = stringPlane " speed " ||| stringPlane (printf "%4.f " pathspeed)
 
