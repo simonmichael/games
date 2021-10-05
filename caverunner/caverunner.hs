@@ -67,12 +67,18 @@ usage w h = banner ++ unlines [
   ,"$ ./caverunner -h|--help       # show this help"
   ,""
   ,"Each CAVE has a high score (the max depth achieved) for each max speed."
-  ,"80x25 terminals are preferred by competition pilots. Your current terminal is "++show w++"x"++show h++"."
+  ,"80x25 terminals are best for competition play. Your current terminal is "++show w++"x"++show h++"."
   ,""
   ,"SPEED limits your maximum dive speed, 1-60 fathoms per second (default 15)."
   ,"High speeds make survival difficult, but increase the glory!"
   ,""
-  ,"https://github.com/vareille/toot (and maybe sox) in PATH enables basic sounds."
+  ]
+soundHelpDisabled = unlines [
+   "To enable sound effects, install sox in PATH:"
+  ,"apt install sox / brew install sox / choco install sox.portable / etc."
+  ]
+soundHelpEnabled soxpath = unlines [
+   "Sound effects are enabled, using " ++ soxpath ++ "."
   ]
 
 -- Keyboard repeat rate configuration tips:
@@ -214,6 +220,10 @@ exitWithUsage w h = do
   clearScreen
   setCursorPosition 0 0
   putStr $ usage w h
+  msox <- findExecutable "sox"
+  putStr $ case msox of
+             Nothing  -> soundHelpDisabled
+             Just sox -> soundHelpEnabled sox
   exitSuccess  
 
 playloop :: Width -> Height -> HighScores -> Cave -> Float -> IO ()
