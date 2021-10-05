@@ -9,7 +9,7 @@ Small games, experiments and game dev notes.
 |     |                                                                                             |              |                             |
 |-----|---------------------------------------------------------------------------------------------|--------------|-----------------------------|
 | ✅🕹🔔 | [caverunner](caverunner)                                                                    | 2021         | haskell, ansi-terminal-game |
-|   🔔  | [breakout](https://github.com/simonmichael/breakout)                                        | 2007, 2020   | haskell, sdl                |
+| &#x3000;&#x3000;🔔  | [breakout](https://github.com/simonmichael/breakout)                                        | 2007, 2020   | haskell, sdl                |
 | ✅  | [metapong](https://github.com/simonmichael/metapong)                                        | 2019         | haskell, ansi-terminal-game |
 | ✅  | [symon](https://github.com/simonmichael/symon)                                              | 2016         | haskell, ansi-terminal      |
 | ✅🕹 | [guess-the-number](https://hub.darcs.net/simon/guess-the-number/browse/guess-the-number.hs) | 2013         | haskell, cli                |
@@ -18,7 +18,7 @@ Small games, experiments and game dev notes.
 |     | [animtest-hs](https://hub.darcs.net/simon/animtest-hs)                                      | 2010         | haskell, sdl, opengl        |
 |     | [wallofdoom](https://hub.darcs.net/simon/wallofdoom)                                        | 2009         | python, pygame              |
 |     | [rocks](https://hub.darcs.net/simon/rocks)                                                  | 2005         | IO                          |
-|   🔔 | [frozen-bubble-py](https://hub.darcs.net/simon/frozen-bubble-py)                            | 2002         | python, pygame              |
+| &#x3000;&#x3000;🔔 | [frozen-bubble-py](https://hub.darcs.net/simon/frozen-bubble-py)                            | 2002         | python, pygame              |
 | ✅🕹 | [FunGEn game engine & example games](https://github.com/haskell-game/fungen) (maintenance)  | 2008-present | haskell, opengl             |
 
 ## Haskell game development
