@@ -152,7 +152,7 @@ data GameState = GameState {
   ,playery         :: Row
   ,playerx         :: Column
   ,playerchar      :: Char
-  ,playercollision :: Bool       -- player has crashed ?
+  ,gameover        :: Bool       -- player has crashed ?
   ,restarttimer    :: Timed Bool -- delay before restart after player crash
   ,pause           :: Bool       -- keep the game paused ?
   ,exit            :: Bool       -- completely exit the app ?
@@ -178,7 +178,7 @@ newGameState w h cave rg hs maxspeed = GameState {
   ,playery         = playerYMin h
   ,playerx         = half w
   ,playerchar      = 'V'
-  ,playercollision = False
+  ,gameover        = False
   ,restarttimer    = creaBoolTimer $ secsToTicks restartdelaysecs
   ,pause           = False
   ,exit            = False
@@ -271,11 +271,11 @@ step g@GameState{..} (KeyPress k)
   | k == 'q'              = g { exit = True }
   | k `elem` "p ", pause  = g { pause = False }
   | k `elem` "p "         = g { pause = True }
-  | k == leftkey,  not (playercollision || pause) =
+  | k == leftkey,  not (gameover || pause) =
       g { playerx = max 1 (playerx - 1)
         , pathspeed = max pathspeedmin (pathspeed * pathspeedbrake)
         }
-  | k == rightkey, not (playercollision || pause) =
+  | k == rightkey, not (gameover || pause) =
       g { playerx = min screenw (playerx + 1)
         , pathspeed = max pathspeedmin (pathspeed * pathspeedbrake)
         }
@@ -291,7 +291,7 @@ step g@GameState{..} Tick =
           }
 
     -- has player crashed ?
-    playercollision' =
+    gameover' =
       case path `atMay` int (playerHeight g - 1) of
         Nothing             -> False
         Just (PathLine l r) -> playerx <= l || playerx > r
@@ -301,14 +301,14 @@ step g@GameState{..} Tick =
       | pause ->  -- paused
         g'
 
-      | not playercollision && playercollision' ->  -- newly crashed
+      | not gameover && gameover' ->  -- newly crashed
         unsafePerformIO (playTone (100,1000)) `seq` -- XXX sound plays before crash is drawn
-        g'{playercollision = True
-          ,highscore       = max score highscore
-          ,restarttimer    = reset restarttimer
+        g'{gameover     = True
+          ,highscore    = max score highscore
+          ,restarttimer = reset restarttimer
           }
 
-      | playercollision ->  -- previously crashed, awaiting restart
+      | gameover ->  -- previously crashed, awaiting restart
         g'{restarttimer = tick restarttimer}
 
       | isExpired pathtimer ->  -- time to step the path
@@ -333,7 +333,7 @@ step g@GameState{..} Tick =
             ,pathspeed       = pathspeed'
             ,pathspeedmin    = pathspeedmin'
             ,pathtimer       = newPathTimer pathspeed'
-            ,playercollision = playercollision'
+            ,gameover        = gameover'
             }
 
       | otherwise ->  -- time is passing
@@ -434,7 +434,7 @@ stepScore g@GameState{..} pathsteps'
 
 -- Should the current game be ended ?
 quit g@GameState{..} =
-  playercollision && isExpired restarttimer && not pause  --  if the restart timer just ended and not paused
+  gameover && isExpired restarttimer && not pause  --  if the restart timer just ended and not paused
   || exit  -- or if q was pressed
 
 -------------------------------------------------------------------------------
@@ -442,12 +442,12 @@ quit g@GameState{..} =
 draw g@GameState{..} =
     blankPlane screenw screenh
   & (max 1 (screenh - toInteger (length path)), 1) % drawPath g
-  & (1, titlex) % drawTitle
-  & (1, cavex) % drawCave g
-  & (3, helpx) % drawHelp g
-  & (1, highscorex) % drawHighScore highscore
-  & (1, scorex) % drawScore score
-  & (2, scorex) % drawSpeed g
+  & (1, titlex)     % drawTitle
+  & (1, cavex)      % drawCave g
+  & (3, helpx)      % drawHelp g
+  & (1, highscorex) % drawHighScore g
+  & (1, scorex)     % drawScore g
+  & (2, scorex)     % drawSpeed g
   -- & (3, screenw - 13) % drawStats g
   & (playery+speedpan, playerx) % drawPlayer g
   where
@@ -465,8 +465,8 @@ draw g@GameState{..} =
 drawPlayer GameState{..} =
   cell char #bold #color hue Vivid
   where
-    (char, hue) | playercollision = (crashchar,Red)
-                | otherwise       = (playerchar,Blue)
+    (char, hue) | gameover  = (crashchar,Red)
+                | otherwise = (playerchar,Blue)
 
 drawTitle = hcat [
    cell 'c' #bold #color Red Vivid
