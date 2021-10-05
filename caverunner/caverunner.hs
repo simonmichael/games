@@ -552,7 +552,7 @@ type Ms = Int
 -- have audible gaps between the sounds.
 soxPlay :: Bool -> Tone -> IO ()
 soxPlay synchronous (hz,ms) = do
-  msox <- findExecutable "sox"
+  msox <- findExecutable "sox" -- XXX not noticeably slow, but should cache
   case msox of
     Nothing   -> return ()
     Just sox ->
@@ -582,7 +582,7 @@ playTones tones = void $ forkIO $ mapM_ playTone' tones
 
 -- Play a sequence of tones N times (non-blocking).
 repeatTones :: Int -> [Tone] -> IO ()
-repeatTones n tones = void $ forkIO $ playTones' $ concat $ replicate n tones
+repeatTones n tones = playTones $ concat $ replicate n tones
 
 
 -- Generate a sequence of same-duration tones from a duration and a list of frequencies.
@@ -593,10 +593,10 @@ isoTones t freqs = [(f,t) | f <- freqs]
 -- sound effects
 
 playStart =
-  repeatTones 2 $ isoTones 150 [100,200,400]
+  repeatTones 2 $ isoTones 100 $ [100,200,400,200]
 
 playDepthCue depth = do
-  playTone (100 + float depth, 150)
+  playTone (100  + float depth, 150)
   playTone (1000 - float depth, 150)
 
 playCrash = do
