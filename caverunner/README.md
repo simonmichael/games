@@ -52,25 +52,31 @@ but couldn't easily get user input.
 
 ## Roadmap/Wishlist
 
+- show crash sites
 - sound effects
   - game start
-  - wind noise (in caves with atmospheres, rising with speed)
-  - thrusters
-  - "near miss" sound
   - depth cues
   - crash
+  - thrusters
   - high score
   - quit
-- sound support
-  - sound check mode (and video check if useful) to help with setup
-  - try sdl-mixer with graceful fallback
+  - wind noise (in caves with atmospheres, rising with speed)
+  - "near miss"
+- more use of colour
 - game mechanics / increase fun
+  - something rewarding at the bottom
   - braking thrusters, with limited fuel
     - activated by a modifier key when those are available
     - otherwise by toggling left/right ?
-  - something interesting at the bottom
+  - auto speedup/slowdown in next game ?
   - return flight to the top ?
-- document vs code+hls setup, dev workflows
+- attract mode
+  - high scores
 - 1.0 release
+- document vs code+hls setup, dev workflows
+- more colour
 - more varied caves and flight mechanics
 - high score sharing / server
+- sound check mode (and video check if useful) to help with setup
+- try soxlib with graceful fallback
+- try sdl-mixer with graceful fallback
