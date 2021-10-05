@@ -508,7 +508,7 @@ drawScore GameState{..} =
 drawSpeed g@GameState{..} = stringPlane " speed " ||| stringPlane (printf "%4.f " pathspeed)
 
 drawStats g@GameState{..} =
-      (stringPlane "    depth " ||| stringPlane (printf "%3d " (max 0 (pathsteps - playerHeight g))))
+      (stringPlane "    depth " ||| stringPlane (printf "%3d " (playerDepth g)))
   === (stringPlane "    width " ||| stringPlane (printf "%3d " pathwidth))
   === (stringPlane " minspeed " ||| stringPlane (printf "%3.f " pathspeedmin))
   -- === (stringPlane " speedpan " ||| stringPlane (printf "%3d " speedpan))
@@ -610,8 +610,11 @@ newPathTimer stepspersec = creaBoolTimer ticks
   where
     ticks = max 1 (secsToTicks  $ 1 / stepspersec)
 
--- Convert player's y coordinate measured from screen top, to height measured from screen bottom.
+-- Player's current height above screen bottom.
 playerHeight GameState{..} = screenh - playery
+
+-- Player's current depth within the cave.
+playerDepth g@GameState{..} = max 0 (pathsteps - playerHeight g)
 
 -- Calculate the player's minimum and maximum y coordinate.
 playerYMin screenh = round $ playerymin * float screenh
