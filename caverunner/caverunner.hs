@@ -293,7 +293,8 @@ step g@GameState{..} (KeyPress k)
 step g@GameState{..} Tick =
   let
     -- gravity - gradually accelerate
-    pathspeed' = min pathspeedmax (pathspeed * pathspeedaccel)
+    pathspeed' | pause     = pathspeed
+               | otherwise = min pathspeedmax (pathspeed * pathspeedaccel)
 
     g' = g{gtick     = gtick+1
           ,pathspeed = pathspeed'
