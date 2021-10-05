@@ -10,7 +10,6 @@ PACKAGES=\
   --package linebreak\
   --package process\
   --package safe\
-  --package silently\
   --package timers-tick\
   --package unidecode\
 

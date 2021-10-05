@@ -9,7 +9,6 @@
   --package linebreak
   --package process
   --package safe
-  --package silently
   --package timers-tick
   --package unidecode
 -}
@@ -40,7 +39,6 @@ import System.Environment
 import System.Exit
 import System.FilePath
 import System.IO
-import System.IO.Silently
 import System.IO.Unsafe (unsafePerformIO)
 import System.Process
 import Terminal.Game
@@ -544,17 +542,12 @@ type Ms = Int
 -- have audible gaps between the sounds.
 soxPlay :: Bool -> Tone -> IO ()
 soxPlay synchronous (hz,ms) = do
-  -- msox <- findExecutable "sox"
-  let msox = Just "sox"
+  msox <- findExecutable "sox"
   case msox of
-    Just sox ->
-      void $
-      -- hSilence [stdout, stderr] $
-      (if synchronous then callCommand else void . spawnCommand) $
-      -- ("sox -nd synth "++show (fromIntegral ms / 1000 :: Float)++" sine " ++ show hz )
-      printf "%s -qnd synth %f sine %f" sox (fromIntegral ms / 1000 :: Float) hz
     Nothing   -> return ()
-
+    Just sox ->
+      (if synchronous then callCommand else void . spawnCommand) $
+      printf "%s -qnd synth %f sine %f" sox (fromIntegral ms / 1000 :: Float) hz
 
 -- Play a tone (blocking).
 playTone' :: Tone -> IO ()
