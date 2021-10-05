@@ -53,7 +53,6 @@ but couldn't easily get user input.
 
 ## Roadmap/Wishlist
 
-- make caves deterministic independent of terminal size
 - play sounds in a separate thread to avoid blocking
 - try sox in addition to/instead of toot
 - try sdl-mixer with graceful fallback

@@ -68,8 +68,7 @@ usage w h = banner ++ unlines [
   ,"$ ./caverunner -h|--help       # show this help"
   ,""
   ,"Each CAVE has a high score (the max depth achieved) for each max speed."
-  ,"Terminals <80 wide (and perhaps >80) are not guaranteed to make the same cave."
-  ,"80x25 is preferred by competition pilots. Your current terminal is "++show w++"x"++show h++"."
+  ,"80x25 terminals are preferred by competition pilots. Your current terminal is "++show w++"x"++show h++"."
   ,""
   ,"SPEED limits your maximum dive speed, 1-60 fathoms per second (default 15)."
   ,"High speeds make survival difficult, but increase the glory!"
@@ -170,7 +169,7 @@ newGameState w h cave rg hs maxspeed = GameState {
   ,speedpan        = 0
   ,pathsteps       = 0
   ,path            = []
-  ,pathwidth       = min 40 $ half w
+  ,pathwidth       = 40  -- for repeatable caves
   ,pathcenter      = half w
   ,pathspeed       = pathspeedinit
   ,pathspeedmin    = pathspeedinit * 2
@@ -191,7 +190,8 @@ data PathLine = PathLine Column Column  -- left wall, right wall
 -------------------------------------------------------------------------------
 
 main = do
-  (w,h) <- displaySize
+  (_w,h) <- displaySize
+  let w = 80  -- for repeatable caves
   highscores <- readHighScores
   args <- getArgs
   when ("-h" `elem` args || "--help" `elem` args) $ exitWithUsage w h
