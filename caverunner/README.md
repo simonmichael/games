@@ -27,6 +27,15 @@ This game has very basic (retro!) sound effects, which in theory should work eve
 To hear them, install [toot](https://github.com/vareille/toot) (and maybe
 [sox](https://sox.sourceforge.net) as well), in your PATH.
 
+## Project status
+
+Installable/playable game,
+occasional development/maintenance,
+help welcome,
+last notable updates 2021,
+developer-hours ~40,
+discussion/support [#haskell-game on matrix](https://matrix.to/#/#haskell-game:matrix.org) or [IRC](https://web.libera.chat/#haskell-game).
+
 ## Dev notes
 
 This is a one-file stack script, not a cabal project.
@@ -42,15 +51,7 @@ went faster ([cave1.anim.gif](old/cave1.anim.gif)),
 but couldn't easily get user input.
 
 
-### Project status
-
-Installable/playable game,
-occasional development/maintenance,
-help welcome,
-last notable updates 2021,
-developer-hours ~40.
-
-### Roadmap/Wishlist
+## Roadmap/Wishlist
 
 - make caves deterministic independent of terminal size
 - play sounds in a separate thread to avoid blocking
