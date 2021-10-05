@@ -27,6 +27,7 @@
 {-# LANGUAGE MultiWayIf, NamedFieldPuns, RecordWildCards, ScopedTypeVariables #-}
 
 import Control.Applicative
+import Control.Concurrent
 import Control.Monad
 import Data.List
 import qualified Data.Map as M
@@ -223,7 +224,7 @@ playloop w h highscores caveseed maxspeed = do
     randomgen = mkStdGen caveseed
     highscore = fromMaybe 0 $ M.lookup (caveseed, round maxspeed) highscores
     t = 100
-  repeatTones' 2 100 [100,200,400]
+  playStart
   GameState{score,exit} <- playGameS $ newGame w h caveseed randomgen highscore maxspeed
   let
     highscore'  = max score highscore
@@ -302,8 +303,8 @@ step g@GameState{..} Tick =
         g'
 
       | not gameover && gameover' ->  -- newly crashed
-        unsafePerformIO (playTone (100,1000)) `seq` -- XXX sound plays before crash is drawn
-        g'{gameover     = True
+        unsafePerformIO playCrash `seq` -- XXX sound plays before crash is drawn
+        g'{gameover     = True --
           ,highscore    = max score highscore
           ,restarttimer = reset restarttimer
           }
@@ -322,7 +323,9 @@ step g@GameState{..} Tick =
           speedpan' = stepSpeedpan g' pathsteps' pathspeed' path'
           score'    = stepScore    g' pathsteps'
         in
-          (if pathsteps' `mod` 100 == 0 then (unsafePerformIO (playTone (400,70)) `seq`) else id) $
+          (if pathsteps' `mod` 5 == 0
+           then (unsafePerformIO (playDepthCue pathsteps') `seq`)
+           else id) $
           g'{randomgen       = randomgen'
             ,score           = score'
             ,speedpan        = speedpan'
@@ -522,53 +525,81 @@ drawPathLine screenw (PathLine left right) = stringPlane line
 
 -------------------------------------------------------------------------------
 
+-- Play sounds with sox (http://sox.sourceforge.net), it it's in PATH.
+-- Most of these are non-blocking, freely forking new threads to play sounds,
+-- with no cleanup; sounds are assumed to be short and harmless.
+-- Limitations:
+-- - exit status is discarded; we don't know if sox is installed or succeeded
+-- - there is a short gap between tones played in a sequence
+
 -- A sound tone (usually a sine wave) with a given pitch and duration.
 type Tone = (Hz, Ms)
 type Hz = Float
 type Ms = Int
 
--- Tone playing functions, blocking.
+-- Play a tone if possible (if sox is installed in PATH), optionally
+-- blocking until the sound finishes playing, otherwise spawning
+-- a thread to play it.
+-- Limitations: there's a short delay before/after a sound, so sequences
+-- have audible gaps between the sounds.
+soxPlay :: Bool -> Tone -> IO ()
+soxPlay synchronous (hz,ms) = do
+  -- msox <- findExecutable "sox"
+  let msox = Just "sox"
+  case msox of
+    Just sox ->
+      void $
+      -- hSilence [stdout, stderr] $
+      (if synchronous then callCommand else void . spawnCommand) $
+      -- ("sox -nd synth "++show (fromIntegral ms / 1000 :: Float)++" sine " ++ show hz )
+      printf "%s -qnd synth %f sine %f" sox (fromIntegral ms / 1000 :: Float) hz
+    Nothing   -> return ()
 
--- Play a tone using toot (https://github.com/vareille/toot), if it's
--- found in PATH, returning its exit code. When toot is not in PATH,
--- return ExitFailure 1.
--- Limitations:
--- - This blocks while the sound is playing.
--- - On some systems, toot won't sound right unless sox is also installed.
--- - sox generates stderr output, which we suppress.
--- - There is a mastodon client also named toot, which won't play tones.
--- - Tone sequences are played with a gap between tones.
-playTone :: Tone -> IO ExitCode
-playTone (hz,ms) = do
-  mtootapp <- findExecutable "toot.app"
-  mtoot    <- findExecutable "toot"
-  case mtootapp <|> mtoot of
-    Just toot ->
-      hSilence [stderr] $
-      system $ toot ++ " -f " ++ show hz ++ " -l " ++ show ms
-    Nothing   -> return $ ExitFailure 1
 
--- Play a sequence of tones.
--- This and the other multi-tone functions return the first non-zero exit code,
--- or ExitSuccess.
-playTones :: [Tone] -> IO ExitCode
-playTones tones = do
-  codes <- mapM playTone tones
-  let code = fromMaybe ExitSuccess $ headMay $ filter (/= ExitSuccess) codes
-  return code
+-- Play a tone (blocking).
+playTone' :: Tone -> IO ()
+playTone' = soxPlay True
 
--- Play a sequence of tones with the same duration.
-playTones' :: Ms -> [Hz] -> IO ExitCode
-playTones' t freqs = playTones [(f,t) | f <- freqs]
+-- Play a sequence of tones (blocking).
+playTones' :: [Tone] -> IO ()
+playTones' tones = mapM_ playTone' tones
 
--- Play a sequence of tones, N times.
-repeatTones :: Int -> [Tone] -> IO ExitCode
-repeatTones n tones = playTones $ concat $ replicate n tones
+-- Play a sequence of tones N times (blocking).
+repeatTones' :: Int -> [Tone] -> IO ()
+repeatTones' n tones = playTones' $ concat $ replicate n tones
 
--- Play a sequence of tones with the same duration, N times.
-repeatTones' :: Int -> Ms -> [Hz] -> IO ExitCode
-repeatTones' n t freqs = playTones' t $ concat $ replicate n freqs
 
+-- Play a tone (non-blocking).
+playTone :: Tone -> IO ()
+playTone = soxPlay False
+
+-- Play a sequence of tones (non-blocking).
+playTones :: [Tone] -> IO ()
+playTones tones = void $ forkIO $ mapM_ playTone' tones
+
+-- Play a sequence of tones N times (non-blocking).
+repeatTones :: Int -> [Tone] -> IO ()
+repeatTones n tones = void $ forkIO $ playTones' $ concat $ replicate n tones
+
+
+-- Generate a sequence of same-duration tones from a duration and a list of frequencies.
+isoTones :: Ms -> [Hz] -> [Tone]
+isoTones t freqs = [(f,t) | f <- freqs]
+
+
+-- sound effects
+
+playStart =
+  repeatTones 2 $ isoTones 150 [100,200,400]
+
+playDepthCue depth = do
+  playTone (100 + float depth, 150)
+  playTone (1000 - float depth, 150)
+
+playCrash = do
+  playTone (100,1000)
+  playTone (200,1000)
+  playTone (300,1000)
 
 -------------------------------------------------------------------------------
 
