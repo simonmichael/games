@@ -29,6 +29,9 @@ To hear them, install [toot](https://github.com/vareille/toot), and maybe
 
 ## Dev notes
 
+This is a one-file stack script, not a cabal project.
+See the parent directory for more notes about this setup.
+
 With ansi-terminal-game you describe the whole screen each frame,
 and it prints just the minimum changes to the terminal.
 [caverunner-fast.anim.gif](caverunner-fast.anim.gif)
@@ -38,4 +41,39 @@ shows about the max speed in a 80x25 Terminal.app window on a m1 macbook.
 went faster ([cave1.anim.gif](old/cave1.anim.gif)),
 but couldn't easily get user input.
 
-See the parent directory for more notes.
+
+### Project status
+
+Playable game, 
+expected to work, 
+occasional dev/maintenance,
+help welcome,
+last notable updates 2021,
+developer-hours ~40.
+
+### Roadmap/Wishlist
+
+- make caves deterministic independent of terminal size
+- play sounds in a separate thread to avoid blocking
+- try sox in addition to/instead of toot
+- try sdl-mixer with graceful fallback
+- sound effects
+  - game start
+  - wind noise (in caves with atmospheres, rising with speed)
+  - thrusters
+  - "near miss" sound
+  - depth cues
+  - crash
+  - high score
+  - quit
+- sound check mode (and video check if useful) to help with setup
+- game mechanics to increase fun
+  - braking thrusters, with limited fuel
+    - activated by a modifier key when those are available
+    - otherwise by toggling left/right ?
+  - something interesting at the bottom
+  - return flight to the top ?
+- document vs code+hls setup, dev workflows
+- 1.0 release
+- more varied caves and flight mechanics
+- high score sharing / server
