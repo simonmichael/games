@@ -5,21 +5,20 @@ Small games, experiments and game dev notes.
 ✅ = confirmed installable in 2021
 🕹 = a playable game
 
-- ✅🕹 [caverunner](caverunner) 2021
-- [sm-breakout](https://github.com/simonmichael/sm-breakout) 2007, 2020
-- ✅ [metapong](https://github.com/simonmichael/metapong) 2019
-- [symon](https://github.com/simonmichael/symon) 2016
-- ✅🕹 [guess-the-number](https://hub.darcs.net/simon/guess-the-number/browse/guess-the-number.hs) 2013
-- [hssdl-osx-template](https://hub.darcs.net/simon/hssdl-osx-template) 2013 - haskell, sdl
-- [hssdl-mac-example](https://github.com/simonmichael/hssdl-mac-example) 2011 - haskell, sdl
-- [animtest-hs](https://hub.darcs.net/simon/animtest-hs) 2010 - haskell, sdl, opengl
-- [wallofdoom](https://hub.darcs.net/simon/wallofdoom) 2009 - python, pygame
-- [rocks](https://hub.darcs.net/simon/rocks) 2005 - IO
-- [frozen-bubble-py](https://hub.darcs.net/simon/frozen-bubble-py) 2002 - python, pygame
-
-Also:
-
-- ✅🕹 [FunGEn game engine & example games](https://github.com/haskell-game/fungen) maintenance, 2008-present - haskell, opengl
+|     |                                                                                             |              |                             |
+|-----|---------------------------------------------------------------------------------------------|--------------|-----------------------------|
+| ✅🕹 | [caverunner](caverunner)                                                                    | 2021         | haskell, ansi-terminal-game |
+|     | [sm-breakout](https://github.com/simonmichael/sm-breakout)                                  | 2007, 2020   | haskell, sdl                |
+| ✅  | [metapong](https://github.com/simonmichael/metapong)                                        | 2019         | haskell, ansi-terminal-game |
+|     | [symon](https://github.com/simonmichael/symon)                                              | 2016         | haskell, ansi-terminal      |
+| ✅🕹 | [guess-the-number](https://hub.darcs.net/simon/guess-the-number/browse/guess-the-number.hs) | 2013         | haskell, cli                |
+|     | [hssdl-osx-template](https://hub.darcs.net/simon/hssdl-osx-template)                        | 2013         | haskell, sdl                |
+|     | [hssdl-mac-example](https://github.com/simonmichael/hssdl-mac-example)                      | 2011         | haskell, sdl                |
+|     | [animtest-hs](https://hub.darcs.net/simon/animtest-hs)                                      | 2010         | haskell, sdl, opengl        |
+|     | [wallofdoom](https://hub.darcs.net/simon/wallofdoom)                                        | 2009         | python, pygame              |
+|     | [rocks](https://hub.darcs.net/simon/rocks)                                                  | 2005         | IO                          |
+|     | [frozen-bubble-py](https://hub.darcs.net/simon/frozen-bubble-py)                            | 2002         | python, pygame              |
+| ✅🕹 | [FunGEn game engine & example games](https://github.com/haskell-game/fungen) (maintenance)  | 2008-present | haskell, opengl             |
 
 ## Haskell game development
 
