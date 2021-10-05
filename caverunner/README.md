@@ -23,9 +23,8 @@ version (eg 8.10), then compile the script.
 
 See also `./caverunner.hs --help`.
 
-This game has very basic (retro!) sound effects, which in theory should work everywhere.
-To hear them, install [toot](https://github.com/vareille/toot) (and maybe
-[sox](https://sox.sourceforge.net) as well), in your PATH.
+To enable sound effects, install [sox](https://sox.sourceforge.net) in PATH:
+do `apt install sox`, `brew install sox`, `choco install sox.portable` or similar.
 
 ## Project status
 
