@@ -2,15 +2,15 @@ Small games, experiments and game dev notes.
 
 ## Games and experiments
 
-✅ = confirmed installable in 2021
+✅ = confirmed installable on target platforms in 2021
 🕹 = a playable game
 
 |     |                                                                                             |              |                             |
 |-----|---------------------------------------------------------------------------------------------|--------------|-----------------------------|
 | ✅🕹 | [caverunner](caverunner)                                                                    | 2021         | haskell, ansi-terminal-game |
-|     | [sm-breakout](https://github.com/simonmichael/sm-breakout)                                  | 2007, 2020   | haskell, sdl                |
+|     | [breakout](https://github.com/simonmichael/breakout)                                        | 2007, 2020   | haskell, sdl                |
 | ✅  | [metapong](https://github.com/simonmichael/metapong)                                        | 2019         | haskell, ansi-terminal-game |
-|     | [symon](https://github.com/simonmichael/symon)                                              | 2016         | haskell, ansi-terminal      |
+| ✅  | [symon](https://github.com/simonmichael/symon)                                              | 2016         | haskell, ansi-terminal      |
 | ✅🕹 | [guess-the-number](https://hub.darcs.net/simon/guess-the-number/browse/guess-the-number.hs) | 2013         | haskell, cli                |
 |     | [hssdl-osx-template](https://hub.darcs.net/simon/hssdl-osx-template)                        | 2013         | haskell, sdl                |
 |     | [hssdl-mac-example](https://github.com/simonmichael/hssdl-mac-example)                      | 2011         | haskell, sdl                |
