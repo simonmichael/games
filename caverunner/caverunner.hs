@@ -311,7 +311,7 @@ step g@GameState{..} Tick =
         g'
 
       | not gameover && gameover' ->  -- newly crashed
-        unsafePerformIO playCrash `seq` -- XXX sound plays before crash is drawn
+        unsafeio playCrash $
         g'{gameover     = True --
           ,highscore    = max score highscore
           ,restarttimer = reset restarttimer
@@ -332,7 +332,7 @@ step g@GameState{..} Tick =
           score'    = stepScore    g' pathsteps'
         in
           (if pathsteps `mod` 5 == 2
-           then (unsafePerformIO (playDepthCue pathsteps') `seq`)
+           then unsafeio (playDepthCue pathsteps')
            else id) $
           g'{randomgen       = randomgen'
             ,score           = score'
@@ -630,3 +630,5 @@ int :: Integer -> Int
 int = fromIntegral
 
 err = errorWithoutStackTrace
+
+unsafeio = seq . unsafePerformIO
