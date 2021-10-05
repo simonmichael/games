@@ -53,9 +53,6 @@ but couldn't easily get user input.
 
 ## Roadmap/Wishlist
 
-- play sounds in a separate thread to avoid blocking
-- try sox in addition to/instead of toot
-- try sdl-mixer with graceful fallback
 - sound effects
   - game start
   - wind noise (in caves with atmospheres, rising with speed)
@@ -65,8 +62,10 @@ but couldn't easily get user input.
   - crash
   - high score
   - quit
-- sound check mode (and video check if useful) to help with setup
-- game mechanics to increase fun
+- sound support
+  - sound check mode (and video check if useful) to help with setup
+  - try sdl-mixer with graceful fallback
+- game mechanics / increase fun
   - braking thrusters, with limited fuel
     - activated by a modifier key when those are available
     - otherwise by toggling left/right ?
