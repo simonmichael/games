@@ -453,6 +453,7 @@ quit g@GameState{..} =
 draw g@GameState{..} =
     blankPlane screenw screenh
   & (max 1 (screenh - toInteger (length path)), 1) % drawPath g
+  & (1, 1)          % blankPlane screenw 1
   & (1, titlex)     % drawTitle
   & (1, cavex)      % drawCave g
   & (3, helpx)      % drawHelp g
