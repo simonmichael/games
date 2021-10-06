@@ -131,16 +131,16 @@ pathspeedbrake = 1     -- multiply speed by this much each player movement (auto
 
 -------------------------------------------------------------------------------
 
-type Cave       = Int
+type CaveNum    = Int  -- the number of a cave, and its random seed
 type MaxSpeed   = Int
 type Speed      = Float
 type Score      = Integer
-type HighScores = M.Map (Cave,MaxSpeed) Score
+type HighScores = M.Map (CaveNum, MaxSpeed) Score
 
 data GameState = GameState {
    screenw         :: Width
   ,screenh         :: Height
-  ,cave            :: Cave
+  ,cavenum            :: CaveNum
   ,randomgen       :: StdGen
   ,gtick           :: Integer    -- current game tick
   ,highscore       :: Score      -- high score for the current cave and max speed
@@ -163,10 +163,10 @@ data GameState = GameState {
   ,exit            :: Bool       -- completely exit the app ?
   }
 
-newGameState w h cave rg hs maxspeed = GameState {
+newGameState w h c rg hs maxspeed = GameState {
    screenw         = w
   ,screenh         = h
-  ,cave            = cave
+  ,cavenum            = c
   ,randomgen       = rg
   ,gtick           = 0
   ,highscore       = hs
@@ -203,7 +203,7 @@ main = do
   let
     defcave  = 1
     defspeed = 15
-    (cave, speed) =
+    (cavenum, speed) =
       case args of
         []    -> (defcave, defspeed)
         [c]   -> (readDef (caveerr c) c, defspeed)
@@ -214,7 +214,7 @@ main = do
             "CAVE should be a natural number (received "++a++"), see --help)"
           speederr a = err $
             "SPEED should be 1-60 (received "++a++"), see --help)"
-  playloop w h highscores cave speed
+  playloop w h highscores cavenum speed
 
 exitWithUsage w h = do
   clearScreen
@@ -226,7 +226,7 @@ exitWithUsage w h = do
              Just sox -> soundHelpEnabled sox
   exitSuccess  
 
-playloop :: Width -> Height -> HighScores -> Cave -> Float -> IO ()
+playloop :: Width -> Height -> HighScores -> CaveNum -> Float -> IO ()
 playloop w h highscores caveseed maxspeed = do
   let
     randomgen = mkStdGen caveseed
@@ -264,11 +264,11 @@ saveFilePath = do
   datadir <- getXdgDirectory XdgData progname
   return $ datadir </> savefilename
 
-newGame screenw screenh cave rg hs maxspeed =
+newGame screenw screenh cavenum rg hs maxspeed =
   Game { gScreenWidth   = screenw,
          gScreenHeight  = screenh-1,  -- last line is unusable on windows apparently
          gFPS           = fps,
-         gInitState     = newGameState screenw screenh cave rg hs maxspeed,
+         gInitState     = newGameState screenw screenh cavenum rg hs maxspeed,
          gLogicFunction = step,
          gDrawFunction  = draw,
          gQuitFunction  = quit
@@ -456,7 +456,7 @@ draw g@GameState{..} =
   & (max 1 (screenh - toInteger (length path)), 1) % drawPath g
   & (1, 1)          % blankPlane screenw 1
   & (1, titlex)     % drawTitle g
-  & (1, cavex)      % drawCave g
+  & (1, cavex)      % drawCaveName g
   & (3, helpx)      % drawHelp g
   & (1, highscorex) % drawHighScore g
   & (1, scorex)     % drawScore g
@@ -465,7 +465,7 @@ draw g@GameState{..} =
   & (playery+speedpan, playerx) % drawPlayer g
   where
     titlew     = 12
-    cavew      = fromIntegral $ 10 + length (show cave) + length (show pathspeedmax)
+    cavew      = fromIntegral $ 10 + length (show cavenum) + length (show pathspeedmax)
     highscorew = 17
     scorew     = 11
 
@@ -488,7 +488,7 @@ drawTitle GameState{..} =
   zip (drop (int pathsteps `div` 3 `mod` 4) $ cycle [color Red Vivid, color Green Vivid, color Blue Vivid, color Yellow Vivid]) $
   map cell (progname++"!")
 
-drawCave GameState{..} = stringPlane $ " cave "++show cave++" @ "++show (round pathspeedmax) ++ " "
+drawCaveName GameState{..} = stringPlane $ " cave "++show cavenum++" @ "++show (round pathspeedmax) ++ " "
 
 drawHelp GameState{..} =
       (cell leftkey  #bold  ||| stringPlane " left ")
