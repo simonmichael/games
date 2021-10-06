@@ -469,26 +469,28 @@ err = errorWithoutStackTrace
 draw g@GameState{..} =
     blankPlane screenw screenh
   & (max 1 (screenh - toInteger (length cavelines)), 1) % drawCave g
-  & (1, 1)          % blankPlane screenw 1
+  -- & (1, 1)          % blankPlane screenw 1
   & (1, titlex)     % drawTitle g
-  & (1, cavex)      % drawCaveName g
+  & (1, cavenamex)  % drawCaveName g
   & (3, helpx)      % drawHelp g
   & (1, highscorex) % drawHighScore g
   & (1, scorex)     % drawScore g
-  & (2, scorex)     % drawSpeed g
+  & (1, speedx)     % drawSpeed g
   -- & (3, screenw - 13) % drawStats g
   & (playery+speedpan, playerx) % drawPlayer g
   where
     titlew     = 12
-    cavew      = fromIntegral $ 10 + length (show cavenum) + length (show cavespeedmax)
+    cavenamew  = fromIntegral $ 10 + length (show cavenum) + length (show cavespeedmax)
     highscorew = 17
     scorew     = 11
+    speedw     = 10
 
     titlex     = 1
     helpx      = 1
-    scorex     = screenw - scorew + 1
-    highscorex = min (scorex - highscorew) (3 * screenw `div` 4 - highscorew)
-    cavex      = min (highscorex - cavew) (screenw `div` 4)
+    speedx     = screenw - speedw + 1
+    scorex     = highscorex + highscorew + half (speedx - (highscorex + highscorew)) - half scorew
+    highscorex = half screenw - half highscorew
+    cavenamex  = min (highscorex - cavenamew) (half (highscorex - (titlex+titlew)) + titlex + titlew - half cavenamew)
 
 drawCave GameState{..} =
   vcat $
@@ -516,7 +518,7 @@ drawTitle GameState{..} =
   map bold $
   map (\(a,b) -> a b) $
   zip (drop (int cavesteps `div` 3 `mod` 4) $ cycle [color Red Vivid, color Green Vivid, color Blue Vivid, color Yellow Vivid]) $
-  map cell (progname++"!")
+  map cell (progname++"! ")
 
 drawCaveName GameState{..} = stringPlane $ " cave "++show cavenum++" @ "++show (round cavespeedmax) ++ " "
 
@@ -536,7 +538,7 @@ drawScore GameState{..} =
   where
     maybebold = if score >= highscore then (#bold) else id
 
-drawSpeed g@GameState{..} = stringPlane " speed " ||| stringPlane (printf "%4.f " cavespeed)
+drawSpeed g@GameState{..} = stringPlane " speed " ||| stringPlane (printf "%3.f " cavespeed)
 
 drawStats g@GameState{..} =
       (stringPlane "    depth " ||| stringPlane (printf "%3d " (playerDepth g)))
