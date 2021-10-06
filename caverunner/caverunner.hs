@@ -81,12 +81,7 @@ soundHelpEnabled soxpath = unlines [
    "Sound effects are enabled, using " ++ soxpath ++ "."
   ]
 
--- Keyboard repeat rate configuration tips:
--- Mac, Big Sur:
--- https://apple.stackexchange.com/questions/411531/increase-keyrepeat-speed-in-macos-big-sur
---  defaults write NSGlobalDomain InitialKeyRepeat -int 10  # 15
---  defaults write NSGlobalDomain KeyRepeat -int 1          # 2
---  reboot
+-------------------------------------------------------------------------------
 
 savefilename       = progname ++ ".save"
 (leftkey,rightkey) = (',','.')
@@ -131,29 +126,31 @@ cavespeedbrake = 1     -- multiply speed by this much each player movement (auto
 
 -------------------------------------------------------------------------------
 
-type CaveNum    = Int  -- the number of a cave, and its random seed
-type MaxSpeed   = Int
+type CaveNum    = Int    -- the number of a cave (and its random seed)
+type MaxSpeed   = Int    -- the maximum scroll speed of a cave / falling speed of player
 type Speed      = Float
 type Score      = Integer
 type HighScores = M.Map (CaveNum, MaxSpeed) Score
 
+data CaveLine = CaveLine Column Column  -- left wall, right wall
+
 data GameState = GameState {
    screenw         :: Width
   ,screenh         :: Height
-  ,cavenum            :: CaveNum
-  ,randomgen       :: StdGen
   ,gtick           :: Integer    -- current game tick
   ,highscore       :: Score      -- high score for the current cave and max speed
   ,score           :: Score      -- current score in this game
-  ,speedpan        :: Height     -- current number of rows to pan the viewport down, based on current speed
-  ,cavesteps       :: Integer    -- how many cave segments have been traversed since game start
-  ,cave            :: [CaveLine] -- recent cave segments for display, newest/bottom-most first
+  ,cavenum         :: CaveNum
+  ,randomgen       :: StdGen
+  ,cavesteps       :: Integer    -- how many cave lines have been generated since game start
+  ,cavelines       :: [CaveLine] -- recent cave segments for display, newest/bottom-most first
   ,cavewidth       :: Width      -- current cave width
   ,cavecenter      :: Column     -- current cave center
   ,cavespeed       :: Speed      -- current speed of cave scroll in steps/s, must be <= fps
   ,cavespeedmin    :: Speed      -- current minimum speed player can brake to
   ,cavespeedmax    :: Speed      -- maximum speed player can accelerate to (an integer), must be <= fps
   ,cavetimer       :: Timed Bool -- delay before next cave scroll
+  ,speedpan        :: Height     -- current number of rows to pan the viewport down, based on current speed
   ,playery         :: Row
   ,playerx         :: Column
   ,playerchar      :: Char
@@ -166,20 +163,20 @@ data GameState = GameState {
 newGameState w h c rg hs maxspeed = GameState {
    screenw         = w
   ,screenh         = h
-  ,cavenum            = c
-  ,randomgen       = rg
   ,gtick           = 0
   ,highscore       = hs
   ,score           = 0
-  ,speedpan        = 0
+  ,cavenum         = c
+  ,randomgen       = rg
   ,cavesteps       = 0
-  ,cave            = []
+  ,cavelines       = []
   ,cavewidth       = 40  -- for repeatable caves
   ,cavecenter      = half w
   ,cavespeed       = cavespeedinit
   ,cavespeedmin    = cavespeedinit * 2
   ,cavespeedmax    = maxspeed
   ,cavetimer       = newCaveTimer cavespeedinit
+  ,speedpan        = 0
   ,playery         = playerYMin h
   ,playerx         = half w
   ,playerchar      = 'V'
@@ -188,8 +185,6 @@ newGameState w h c rg hs maxspeed = GameState {
   ,pause           = False
   ,exit            = False
   }
-
-data CaveLine = CaveLine Column Column  -- left wall, right wall
 
 
 -------------------------------------------------------------------------------
@@ -201,11 +196,11 @@ main = do
   args <- getArgs
   when ("-h" `elem` args || "--help" `elem` args) $ exitWithUsage w h
   let
-    defcave  = 1
-    defspeed = 15
+    defcavenum = 1
+    defspeed   = 15
     (cavenum, speed) =
       case args of
-        []    -> (defcave, defspeed)
+        []    -> (defcavenum, defspeed)
         [c]   -> (readDef (caveerr c) c, defspeed)
         [c,s] -> (readDef (caveerr c) c, readDef (speederr s) s)
         _     -> err "too many arguments, please see --help"
@@ -276,6 +271,11 @@ newGame screenw screenh cavenum rg hs maxspeed =
 
 -------------------------------------------------------------------------------
 
+-- Should the current game be ended ?
+quit g@GameState{..} =
+  gameover && isExpired restarttimer && not pause  --  if the restart timer just ended and not paused
+  || exit  -- or if q was pressed
+
 step g@GameState{..} (KeyPress k)
   | k == 'q'              = g { exit = True }
   | k `elem` "p ", pause  = g { pause = False }
@@ -302,7 +302,7 @@ step g@GameState{..} Tick =
 
     -- has player crashed ?
     gameover' =
-      case cave `atMay` int (playerHeight g - 1) of
+      case cavelines `atMay` int (playerHeight g - 1) of
         Nothing             -> False
         Just (CaveLine l r) -> playerx <= l || playerx > r
 
@@ -313,7 +313,7 @@ step g@GameState{..} Tick =
 
       | not gameover && gameover' ->  -- newly crashed
         unsafeio playCrash $
-        g'{gameover     = True --
+        g'{gameover     = True
           ,highscore    = max score highscore
           ,restarttimer = reset restarttimer
           }
@@ -328,9 +328,9 @@ step g@GameState{..} Tick =
            cavewidth',
            randomgen',
            cavecenter',
-           cave')   = stepCave     g'
-          speedpan' = stepSpeedpan g' cavesteps' cavespeed' cave'
-          score'    = stepScore    g' cavesteps'
+           cavelines') = stepCave     g'
+          speedpan'    = stepSpeedpan g' cavesteps' cavespeed' cavelines'
+          score'       = stepScore    g' cavesteps'
         in
           (if cavesteps `mod` 5 == 2
            then unsafeio (playDepthCue cavesteps')
@@ -339,7 +339,7 @@ step g@GameState{..} Tick =
             ,score           = score'
             ,speedpan        = speedpan'
             ,cavesteps       = cavesteps'
-            ,cave            = cave'
+            ,cavelines       = cavelines'
             ,cavewidth       = cavewidth'
             ,cavecenter      = cavecenter'
             ,cavespeed       = cavespeed'
@@ -357,7 +357,7 @@ stepCave GameState{..} =
   ,cavewidth'
   ,randomgen'
   ,cavecenter'
-  ,cave')
+  ,cavelines')
   where
     cavesteps' = cavesteps + 1
 
@@ -396,7 +396,7 @@ stepCave GameState{..} =
 
     -- extend the cave, discarding old lines,
     -- except for an extra screenful that might be needed for speedpan
-    cave' = take (int screenh * 2) $ CaveLine l r : cave
+    cavelines' = take (int screenh * 2) $ CaveLine l r : cavelines
       where
         (l,r) = caveWalls cavecenter' cavewidth'
 
@@ -405,13 +405,13 @@ stepCave GameState{..} =
 -- only after screen has filled with cave steps
 -- pan gradually, at most one row every few cave steps
 -- keep player within configured min/max Y bounds
-stepSpeedpan GameState{..} cavesteps' cavespeed' cave'
+stepSpeedpan GameState{..} cavesteps' cavespeed' cavelines'
   | speedpan < idealpan, readytopan = speedpan+1
   | speedpan > idealpan, readytopan = speedpan-1
   | otherwise                       = speedpan
   where
     readytopan = 
-      length cave' >= int screenh
+      length cavelines' >= int screenh
       && cavesteps' `mod` 5 == 0
     idealpan =
       round $
@@ -423,37 +423,50 @@ stepScore g@GameState{..} cavesteps'
   | cavesteps' >= playerHeight g = score + 1
   | otherwise                    = score
 
--- bot player
-    -- skill = 0
-    -- playerdx <- randomRIO $
-    -- playerdx = fst $ -- XXX
-    --   if | playerx < cavecenter' ->
-    --          case skill of
-    --            0 -> (-1,1)
-    --            1 -> (0,1)
-    --            _ -> (1,1)
-    --      | playerx > cavecenter' ->
-    --          case skill of
-    --            0 -> (-1,1)
-    --            1 -> (-1,0)
-    --            _ -> (-1,-1)
-    --      | otherwise ->
-    --          case skill of
-    --            0 -> (-1,1)
-    --            1 -> (-1,1)
-    --            _ -> (0,0)
-    -- playerx' = playerx + playerdx
+-------------------------------------------------------------------------------
 
--- Should the current game be ended ?
-quit g@GameState{..} =
-  gameover && isExpired restarttimer && not pause  --  if the restart timer just ended and not paused
-  || exit  -- or if q was pressed
+-- Create a timer for the next cave step, given the desired steps/s.
+-- The steps/s should be no greater than ticks/s (the frame rate),
+-- and will be capped at that (creating a one-tick timer).
+newCaveTimer stepspersec = creaBoolTimer ticks
+  where
+    ticks = max 1 (secsToTicks  $ 1 / stepspersec)
+
+-- Calculate the cave's left and right wall coordinates from center and width.
+caveWalls center width = (center - half width, center + half width)
+
+-- Player's current height above screen bottom.
+playerHeight GameState{..} = screenh - playery
+
+-- Player's current depth within the cave.
+playerDepth g@GameState{..} = max 0 (cavesteps - playerHeight g)
+
+-- Calculate the player's minimum and maximum y coordinate.
+playerYMin screenh = round $ playerymin * float screenh
+playerYMax screenh = round $ playerymax * float screenh
+
+-- Convert seconds to game ticks based on global frame rate.
+secsToTicks :: Float -> Integer
+secsToTicks = round . (* float fps)
+
+half :: Integral a => a -> a
+half = (`div` 2)
+
+float :: Integer -> Float
+float = fromInteger
+
+int :: Integer -> Int
+int = fromIntegral
+
+unsafeio = seq . unsafePerformIO
+
+err = errorWithoutStackTrace
 
 -------------------------------------------------------------------------------
 
 draw g@GameState{..} =
     blankPlane screenw screenh
-  & (max 1 (screenh - toInteger (length cave)), 1) % drawCave g
+  & (max 1 (screenh - toInteger (length cavelines)), 1) % drawCave g
   & (1, 1)          % blankPlane screenw 1
   & (1, titlex)     % drawTitle g
   & (1, cavex)      % drawCaveName g
@@ -515,7 +528,12 @@ drawStats g@GameState{..} =
   -- === (stringPlane " speedpan " ||| stringPlane (printf "%3d " speedpan))
   -- === (stringPlane "    speed " ||| stringPlane (printf "%3.f " cavespeed))
 
-drawCave GameState{..} = vcat (map (drawCaveLine screenw) $ reverse $ take (int screenh) $ drop (int speedpan) cave)
+drawCave GameState{..} =
+  vcat $
+  map (drawCaveLine screenw) $
+  reverse $
+  take (int screenh) $
+  drop (int speedpan) cavelines
 
 drawCaveLine screenw (CaveLine left right) = stringPlane line
   where
@@ -583,7 +601,6 @@ repeatTones n tones = playTones $ concat $ replicate n tones
 isoTones :: Ms -> [Hz] -> [Tone]
 isoTones t freqs = [(f,t) | f <- freqs]
 
-
 -- sound effects
 
 playStart =
@@ -598,41 +615,3 @@ playCrash = do
   playTone (200,1000)
   playTone (300,1000)
 
--------------------------------------------------------------------------------
-
--- Convert seconds to game ticks based on global frame rate.
-secsToTicks :: Float -> Integer
-secsToTicks = round . (* float fps)
-
--- Convert steps/s to ticks/step and create a timer for one step.
--- The steps/s should be no greater than ticks/s (the frame rate),
--- and will be capped at that (creating a one-tick timer).
-newCaveTimer stepspersec = creaBoolTimer ticks
-  where
-    ticks = max 1 (secsToTicks  $ 1 / stepspersec)
-
--- Player's current height above screen bottom.
-playerHeight GameState{..} = screenh - playery
-
--- Player's current depth within the cave.
-playerDepth g@GameState{..} = max 0 (cavesteps - playerHeight g)
-
--- Calculate the player's minimum and maximum y coordinate.
-playerYMin screenh = round $ playerymin * float screenh
-playerYMax screenh = round $ playerymax * float screenh
-
--- Calculate the cave's left and right wall coordinates from center and width.
-caveWalls center width = (center - half width, center + half width)
-
-half :: Integral a => a -> a
-half = (`div` 2)
-
-float :: Integer -> Float
-float = fromInteger
-
-int :: Integer -> Int
-int = fromIntegral
-
-err = errorWithoutStackTrace
-
-unsafeio = seq . unsafePerformIO
