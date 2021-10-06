@@ -91,18 +91,18 @@ soundHelpEnabled soxpath = unlines [
 savefilename       = progname ++ ".save"
 (leftkey,rightkey) = (',','.')
 wallchar           = '#'
-pathchar           = ' '
+spacechar          = ' '
 crashchar          = '*'
 fps                = 60  -- target frame rate; computer/terminal may not achieve it
 restartdelaysecs   = 5
 
-pathmarginmin      = 2
-pathwidthmin       = 0
--- how long to stay at each path width, eg:
---  (20, 2) "at 20+,   narrow (by 1) every 2 path steps"
+cavemarginmin      = 2
+cavewidthmin       = 0
+-- how long to stay at each cave width, eg:
+--  (20, 2) "at 20+,   narrow (by 1) every 2 cave steps"
 --  (10,10) "at 10-19, narrow every 10 steps"
 --  ( 8,50) "at 8-9,   narrow every 50 steps"
-pathwidthdurations = [
+cavewidthdurations = [
    (20,3)
   ,(10,10)
   ,( 8,50)
@@ -114,19 +114,19 @@ pathwidthdurations = [
   ,( 2,3)
   ]
 
-pathspeedinit  = 1     -- initial path scrolling speed
-pathspeedaccel = 1.01  -- multiply speed by this much each game tick (gravity)
-pathspeedbrake = 1     -- multiply speed by this much each player movement (autobraking)
+cavespeedinit  = 1     -- initial cave scrolling speed
+cavespeedaccel = 1.01  -- multiply speed by this much each game tick (gravity)
+cavespeedbrake = 1     -- multiply speed by this much each player movement (autobraking)
 (playerymin, playerymax) = (0.4, 0.4)  -- player bounds relative to screen height, different bounds enables speed panning
 
--- pathspeedinit  = 2            
--- pathspeedaccel = 1.005         
--- pathspeedbrake = 0.7           
+-- cavespeedinit  = 2            
+-- cavespeedaccel = 1.005         
+-- cavespeedbrake = 0.7           
 -- (playerymin, playerymax) = (0.2, 0.6)
 
--- pathspeedinit  = 4
--- pathspeedaccel = 1.001
--- pathspeedbrake = 0.8
+-- cavespeedinit  = 4
+-- cavespeedaccel = 1.001
+-- cavespeedbrake = 0.8
 -- (playerymin, playerymax) = (0.4, 0.4)
 
 -------------------------------------------------------------------------------
@@ -146,14 +146,14 @@ data GameState = GameState {
   ,highscore       :: Score      -- high score for the current cave and max speed
   ,score           :: Score      -- current score in this game
   ,speedpan        :: Height     -- current number of rows to pan the viewport down, based on current speed
-  ,pathsteps       :: Integer    -- how many path segments have been traversed since game start
-  ,path            :: [PathLine] -- recent path segments for display, newest/bottom-most first
-  ,pathwidth       :: Width      -- current path width
-  ,pathcenter      :: Column     -- current path center
-  ,pathspeed       :: Speed      -- current speed of path scroll in steps/s, must be <= fps
-  ,pathspeedmin    :: Speed      -- current minimum speed player can brake to
-  ,pathspeedmax    :: Speed      -- maximum speed player can accelerate to (an integer), must be <= fps
-  ,pathtimer       :: Timed Bool -- delay before next path scroll
+  ,cavesteps       :: Integer    -- how many cave segments have been traversed since game start
+  ,cave            :: [CaveLine] -- recent cave segments for display, newest/bottom-most first
+  ,cavewidth       :: Width      -- current cave width
+  ,cavecenter      :: Column     -- current cave center
+  ,cavespeed       :: Speed      -- current speed of cave scroll in steps/s, must be <= fps
+  ,cavespeedmin    :: Speed      -- current minimum speed player can brake to
+  ,cavespeedmax    :: Speed      -- maximum speed player can accelerate to (an integer), must be <= fps
+  ,cavetimer       :: Timed Bool -- delay before next cave scroll
   ,playery         :: Row
   ,playerx         :: Column
   ,playerchar      :: Char
@@ -172,14 +172,14 @@ newGameState w h c rg hs maxspeed = GameState {
   ,highscore       = hs
   ,score           = 0
   ,speedpan        = 0
-  ,pathsteps       = 0
-  ,path            = []
-  ,pathwidth       = 40  -- for repeatable caves
-  ,pathcenter      = half w
-  ,pathspeed       = pathspeedinit
-  ,pathspeedmin    = pathspeedinit * 2
-  ,pathspeedmax    = maxspeed
-  ,pathtimer       = newPathTimer pathspeedinit
+  ,cavesteps       = 0
+  ,cave            = []
+  ,cavewidth       = 40  -- for repeatable caves
+  ,cavecenter      = half w
+  ,cavespeed       = cavespeedinit
+  ,cavespeedmin    = cavespeedinit * 2
+  ,cavespeedmax    = maxspeed
+  ,cavetimer       = newCaveTimer cavespeedinit
   ,playery         = playerYMin h
   ,playerx         = half w
   ,playerchar      = 'V'
@@ -189,7 +189,7 @@ newGameState w h c rg hs maxspeed = GameState {
   ,exit            = False
   }
 
-data PathLine = PathLine Column Column  -- left wall, right wall
+data CaveLine = CaveLine Column Column  -- left wall, right wall
 
 
 -------------------------------------------------------------------------------
@@ -282,29 +282,29 @@ step g@GameState{..} (KeyPress k)
   | k `elem` "p "         = g { pause = True }
   | k == leftkey,  not (gameover || pause) =
       g { playerx = max 1 (playerx - 1)
-        , pathspeed = max pathspeedmin (pathspeed * pathspeedbrake)
+        , cavespeed = max cavespeedmin (cavespeed * cavespeedbrake)
         }
   | k == rightkey, not (gameover || pause) =
       g { playerx = min screenw (playerx + 1)
-        , pathspeed = max pathspeedmin (pathspeed * pathspeedbrake)
+        , cavespeed = max cavespeedmin (cavespeed * cavespeedbrake)
         }
   | otherwise = g
 
 step g@GameState{..} Tick =
   let
     -- gravity - gradually accelerate
-    pathspeed' | pause     = pathspeed
-               | otherwise = min pathspeedmax (pathspeed * pathspeedaccel)
+    cavespeed' | pause     = cavespeed
+               | otherwise = min cavespeedmax (cavespeed * cavespeedaccel)
 
     g' = g{gtick     = gtick+1
-          ,pathspeed = pathspeed'
+          ,cavespeed = cavespeed'
           }
 
     -- has player crashed ?
     gameover' =
-      case path `atMay` int (playerHeight g - 1) of
+      case cave `atMay` int (playerHeight g - 1) of
         Nothing             -> False
-        Just (PathLine l r) -> playerx <= l || playerx > r
+        Just (CaveLine l r) -> playerx <= l || playerx > r
 
   in  -- breaks my haskell-mode's indentation
     if
@@ -321,118 +321,118 @@ step g@GameState{..} Tick =
       | gameover ->  -- previously crashed, awaiting restart
         g'{restarttimer = tick restarttimer}
 
-      | isExpired pathtimer ->  -- time to step the path
+      | isExpired cavetimer ->  -- time to step the cave
         let
-          (pathsteps',
-           pathspeedmin',
-           pathwidth',
+          (cavesteps',
+           cavespeedmin',
+           cavewidth',
            randomgen',
-           pathcenter',
-           path')   = stepPath     g'
-          speedpan' = stepSpeedpan g' pathsteps' pathspeed' path'
-          score'    = stepScore    g' pathsteps'
+           cavecenter',
+           cave')   = stepCave     g'
+          speedpan' = stepSpeedpan g' cavesteps' cavespeed' cave'
+          score'    = stepScore    g' cavesteps'
         in
-          (if pathsteps `mod` 5 == 2
-           then unsafeio (playDepthCue pathsteps')
+          (if cavesteps `mod` 5 == 2
+           then unsafeio (playDepthCue cavesteps')
            else id) $
           g'{randomgen       = randomgen'
             ,score           = score'
             ,speedpan        = speedpan'
-            ,pathsteps       = pathsteps'
-            ,path            = path'
-            ,pathwidth       = pathwidth'
-            ,pathcenter      = pathcenter'
-            ,pathspeed       = pathspeed'
-            ,pathspeedmin    = pathspeedmin'
-            ,pathtimer       = newPathTimer pathspeed'
+            ,cavesteps       = cavesteps'
+            ,cave            = cave'
+            ,cavewidth       = cavewidth'
+            ,cavecenter      = cavecenter'
+            ,cavespeed       = cavespeed'
+            ,cavespeedmin    = cavespeedmin'
+            ,cavetimer       = newCaveTimer cavespeed'
             ,gameover        = gameover'
             }
 
       | otherwise ->  -- time is passing
-        g'{pathtimer = tick pathtimer}
+        g'{cavetimer = tick cavetimer}
 
-stepPath GameState{..} =
-  (pathsteps'
-  ,pathspeedmin'
-  ,pathwidth'
+stepCave GameState{..} =
+  (cavesteps'
+  ,cavespeedmin'
+  ,cavewidth'
   ,randomgen'
-  ,pathcenter'
-  ,path')
+  ,cavecenter'
+  ,cave')
   where
-    pathsteps' = pathsteps + 1
+    cavesteps' = cavesteps + 1
 
     -- hurryup - slowly increase minimum speed ?
-    -- pathspeedmin' = pathspeedinit * 2 + float (pathsteps `div` 100)
-    pathspeedmin' = pathspeedmin
+    -- cavespeedmin' = cavespeedinit * 2 + float (cavesteps `div` 100)
+    cavespeedmin' = cavespeedmin
 
-    -- narrowing - gradually narrow path
-    pathwidth'
-      | cannarrow = max pathwidthmin (pathwidth - 1)
-      | otherwise = pathwidth
+    -- narrowing - gradually narrow cave
+    cavewidth'
+      | cannarrow = max cavewidthmin (cavewidth - 1)
+      | otherwise = cavewidth
       where
-        cannarrow = (pathsteps' `mod` interval) == 0
+        cannarrow = (cavesteps' `mod` interval) == 0
           where
-            interval = maybe 1 snd $ find ((<= pathwidth) . fst) pathwidthdurations
+            interval = maybe 1 snd $ find ((<= cavewidth) . fst) cavewidthdurations
 
     -- morejagged - slowly increase max allowed sideways shift ?
     maxdx =
-      -- min (pathwidth' `div` 4) (pathsteps' `div` 100 + 1)
-      min (pathwidth' `div` 4) 1
+      -- min (cavewidth' `div` 4) (cavesteps' `div` 100 + 1)
+      min (cavewidth' `div` 4) 1
 
-    -- choose path's next x position, with constraints:
+    -- choose cave's next x position, with constraints:
     -- keep the walls within bounds
     (randomdx, randomgen') = getRandom (-maxdx,maxdx) randomgen
-    pathcenter' =
+    cavecenter' =
       let
-        x = pathcenter + randomdx
-        (l,r) = pathWalls x pathwidth'
-        (pathmin,pathmax) = (margin, screenw - margin)
+        x = cavecenter + randomdx
+        (l,r) = caveWalls x cavewidth'
+        (cavemin,cavemax) = (margin, screenw - margin)
           where
-            margin = max pathmarginmin (screenw `div` 40)
+            margin = max cavemarginmin (screenw `div` 40)
       in
-        if | l < pathmin -> pathmin + half pathwidth'
-           | r > pathmax -> pathmax - half pathwidth'
+        if | l < cavemin -> cavemin + half cavewidth'
+           | r > cavemax -> cavemax - half cavewidth'
            | otherwise   -> x
 
-    -- extend the path, discarding old lines,
+    -- extend the cave, discarding old lines,
     -- except for an extra screenful that might be needed for speedpan
-    path' = take (int screenh * 2) $ PathLine l r : path
+    cave' = take (int screenh * 2) $ CaveLine l r : cave
       where
-        (l,r) = pathWalls pathcenter' pathwidth'
+        (l,r) = caveWalls cavecenter' cavewidth'
 
 -- speedpan - as speed increases, pan the viewport up (player and walls move down)
 -- with constraints:
--- only after screen has filled with path steps
--- pan gradually, at most one row every few path steps
+-- only after screen has filled with cave steps
+-- pan gradually, at most one row every few cave steps
 -- keep player within configured min/max Y bounds
-stepSpeedpan GameState{..} pathsteps' pathspeed' path'
+stepSpeedpan GameState{..} cavesteps' cavespeed' cave'
   | speedpan < idealpan, readytopan = speedpan+1
   | speedpan > idealpan, readytopan = speedpan-1
   | otherwise                       = speedpan
   where
     readytopan = 
-      length path' >= int screenh
-      && pathsteps' `mod` 5 == 0
+      length cave' >= int screenh
+      && cavesteps' `mod` 5 == 0
     idealpan =
       round $
       float (playerYMax screenh - playerYMin screenh)
-      * (pathspeed'-pathspeedinit) / (pathspeedmax-pathspeedinit)
+      * (cavespeed'-cavespeedinit) / (cavespeedmax-cavespeedinit)
 
 -- increase score for every step deeper into the cave
-stepScore g@GameState{..} pathsteps'
-  | pathsteps' >= playerHeight g = score + 1
+stepScore g@GameState{..} cavesteps'
+  | cavesteps' >= playerHeight g = score + 1
   | otherwise                    = score
 
 -- bot player
     -- skill = 0
     -- playerdx <- randomRIO $
     -- playerdx = fst $ -- XXX
-    --   if | playerx < pathcenter' ->
+    --   if | playerx < cavecenter' ->
     --          case skill of
     --            0 -> (-1,1)
     --            1 -> (0,1)
     --            _ -> (1,1)
-    --      | playerx > pathcenter' ->
+    --      | playerx > cavecenter' ->
     --          case skill of
     --            0 -> (-1,1)
     --            1 -> (-1,0)
@@ -453,7 +453,7 @@ quit g@GameState{..} =
 
 draw g@GameState{..} =
     blankPlane screenw screenh
-  & (max 1 (screenh - toInteger (length path)), 1) % drawPath g
+  & (max 1 (screenh - toInteger (length cave)), 1) % drawCave g
   & (1, 1)          % blankPlane screenw 1
   & (1, titlex)     % drawTitle g
   & (1, cavex)      % drawCaveName g
@@ -465,7 +465,7 @@ draw g@GameState{..} =
   & (playery+speedpan, playerx) % drawPlayer g
   where
     titlew     = 12
-    cavew      = fromIntegral $ 10 + length (show cavenum) + length (show pathspeedmax)
+    cavew      = fromIntegral $ 10 + length (show cavenum) + length (show cavespeedmax)
     highscorew = 17
     scorew     = 11
 
@@ -485,10 +485,10 @@ drawTitle GameState{..} =
   hcat $
   map bold $
   map (\(a,b) -> a b) $
-  zip (drop (int pathsteps `div` 3 `mod` 4) $ cycle [color Red Vivid, color Green Vivid, color Blue Vivid, color Yellow Vivid]) $
+  zip (drop (int cavesteps `div` 3 `mod` 4) $ cycle [color Red Vivid, color Green Vivid, color Blue Vivid, color Yellow Vivid]) $
   map cell (progname++"!")
 
-drawCaveName GameState{..} = stringPlane $ " cave "++show cavenum++" @ "++show (round pathspeedmax) ++ " "
+drawCaveName GameState{..} = stringPlane $ " cave "++show cavenum++" @ "++show (round cavespeedmax) ++ " "
 
 drawHelp GameState{..} =
       (cell leftkey  #bold  ||| stringPlane " left ")
@@ -506,22 +506,22 @@ drawScore GameState{..} =
   where
     maybebold = if score >= highscore then (#bold) else id
 
-drawSpeed g@GameState{..} = stringPlane " speed " ||| stringPlane (printf "%4.f " pathspeed)
+drawSpeed g@GameState{..} = stringPlane " speed " ||| stringPlane (printf "%4.f " cavespeed)
 
 drawStats g@GameState{..} =
       (stringPlane "    depth " ||| stringPlane (printf "%3d " (playerDepth g)))
-  === (stringPlane "    width " ||| stringPlane (printf "%3d " pathwidth))
-  === (stringPlane " minspeed " ||| stringPlane (printf "%3.f " pathspeedmin))
+  === (stringPlane "    width " ||| stringPlane (printf "%3d " cavewidth))
+  === (stringPlane " minspeed " ||| stringPlane (printf "%3.f " cavespeedmin))
   -- === (stringPlane " speedpan " ||| stringPlane (printf "%3d " speedpan))
-  -- === (stringPlane "    speed " ||| stringPlane (printf "%3.f " pathspeed))
+  -- === (stringPlane "    speed " ||| stringPlane (printf "%3.f " cavespeed))
 
-drawPath GameState{..} = vcat (map (drawPathLine screenw) $ reverse $ take (int screenh) $ drop (int speedpan) path)
+drawCave GameState{..} = vcat (map (drawCaveLine screenw) $ reverse $ take (int screenh) $ drop (int speedpan) cave)
 
-drawPathLine screenw (PathLine left right) = stringPlane line
+drawCaveLine screenw (CaveLine left right) = stringPlane line
   where
     line = concat [
        replicate (int left) wallchar
-      ,replicate (int $ right - left) pathchar
+      ,replicate (int $ right - left) spacechar
       ,replicate (int $ screenw - right ) wallchar
       ]
 
@@ -607,7 +607,7 @@ secsToTicks = round . (* float fps)
 -- Convert steps/s to ticks/step and create a timer for one step.
 -- The steps/s should be no greater than ticks/s (the frame rate),
 -- and will be capped at that (creating a one-tick timer).
-newPathTimer stepspersec = creaBoolTimer ticks
+newCaveTimer stepspersec = creaBoolTimer ticks
   where
     ticks = max 1 (secsToTicks  $ 1 / stepspersec)
 
@@ -615,14 +615,14 @@ newPathTimer stepspersec = creaBoolTimer ticks
 playerHeight GameState{..} = screenh - playery
 
 -- Player's current depth within the cave.
-playerDepth g@GameState{..} = max 0 (pathsteps - playerHeight g)
+playerDepth g@GameState{..} = max 0 (cavesteps - playerHeight g)
 
 -- Calculate the player's minimum and maximum y coordinate.
 playerYMin screenh = round $ playerymin * float screenh
 playerYMax screenh = round $ playerymax * float screenh
 
--- Calculate the path's left and right wall coordinates from center and width.
-pathWalls center width = (center - half width, center + half width)
+-- Calculate the cave's left and right wall coordinates from center and width.
+caveWalls center width = (center - half width, center + half width)
 
 half :: Integral a => a -> a
 half = (`div` 2)
