@@ -186,7 +186,6 @@ newGameState w h c rg hs maxspeed = GameState {
   ,exit            = False
   }
 
-
 -------------------------------------------------------------------------------
 
 main = do
@@ -226,9 +225,10 @@ playloop w h highscores caveseed maxspeed = do
   let
     randomgen = mkStdGen caveseed
     highscore = fromMaybe 0 $ M.lookup (caveseed, round maxspeed) highscores
-    t = 100
   playStart
-  GameState{score,exit} <- playGameS $ newGame w h caveseed randomgen highscore maxspeed
+  GameState{score,exit} <-
+    Terminal.Game.playGameS $
+    newGame w h caveseed randomgen highscore maxspeed
   let
     highscore'  = max score highscore
     highscores' = M.insert (caveseed, round maxspeed) highscore' highscores
@@ -236,6 +236,18 @@ playloop w h highscores caveseed maxspeed = do
   unless exit $ do
     (w',h') <- displaySize
     playloop w' h' highscores' caveseed maxspeed
+
+newGame screenw screenh cavenum rg hs maxspeed =
+  Game { gScreenWidth   = screenw,
+         gScreenHeight  = screenh-1,  -- last line is unusable on windows apparently
+         gFPS           = fps,
+         gInitState     = newGameState screenw screenh cavenum rg hs maxspeed,
+         gLogicFunction = step,
+         gDrawFunction  = draw,
+         gQuitFunction  = quit
+       }
+
+-------------------------------------------------------------------------------
 
 -- a high score for each cave seed is stored in the save file
 readHighScores :: IO HighScores
@@ -258,16 +270,6 @@ saveFilePath :: IO FilePath
 saveFilePath = do
   datadir <- getXdgDirectory XdgData progname
   return $ datadir </> savefilename
-
-newGame screenw screenh cavenum rg hs maxspeed =
-  Game { gScreenWidth   = screenw,
-         gScreenHeight  = screenh-1,  -- last line is unusable on windows apparently
-         gFPS           = fps,
-         gInitState     = newGameState screenw screenh cavenum rg hs maxspeed,
-         gLogicFunction = step,
-         gDrawFunction  = draw,
-         gQuitFunction  = quit
-       }
 
 -------------------------------------------------------------------------------
 
@@ -488,6 +490,21 @@ draw g@GameState{..} =
     highscorex = min (scorex - highscorew) (3 * screenw `div` 4 - highscorew)
     cavex      = min (highscorex - cavew) (screenw `div` 4)
 
+drawCave GameState{..} =
+  vcat $
+  map (drawCaveLine screenw) $
+  reverse $
+  take (int screenh) $
+  drop (int speedpan) cavelines
+
+drawCaveLine screenw (CaveLine left right) = stringPlane line
+  where
+    line = concat [
+       replicate (int left) wallchar
+      ,replicate (int $ right - left) spacechar
+      ,replicate (int $ screenw - right ) wallchar
+      ]
+
 drawPlayer GameState{..} =
   cell char #bold #color hue Vivid
   where
@@ -527,21 +544,6 @@ drawStats g@GameState{..} =
   === (stringPlane " minspeed " ||| stringPlane (printf "%3.f " cavespeedmin))
   -- === (stringPlane " speedpan " ||| stringPlane (printf "%3d " speedpan))
   -- === (stringPlane "    speed " ||| stringPlane (printf "%3.f " cavespeed))
-
-drawCave GameState{..} =
-  vcat $
-  map (drawCaveLine screenw) $
-  reverse $
-  take (int screenh) $
-  drop (int speedpan) cavelines
-
-drawCaveLine screenw (CaveLine left right) = stringPlane line
-  where
-    line = concat [
-       replicate (int left) wallchar
-      ,replicate (int $ right - left) spacechar
-      ,replicate (int $ screenw - right ) wallchar
-      ]
 
 -------------------------------------------------------------------------------
 
