@@ -91,9 +91,27 @@ crashchar          = '*'
 fps                = 60  -- target frame rate; computer/terminal may not achieve it
 restartdelaysecs   = 5
 
-cavemarginmin      = 2
-cavewidthmin       = 0
--- how long to stay at each cave width, eg:
+{- Three widths:
+
+<-----------------------------screen width (terminal size)------------------------------->
+
+    <----------------------------------game width (80)----------------------------->
+    caverunner!    cave 1 @ 15      high score 0450        score 0000      speed   2  
+
+    ####################<---cave width (decreasing from 40)---->####################
+    #####################                                        ###################
+    #####################                                      #####################
+
+-}
+
+gamewidth = 80  -- How many columns to use (and require) for the game. 
+                -- Changing this can change the procedurally-generated caves.
+                -- Can reduce it to support narrower windows during development.
+
+cavemarginmin      = 2  -- how close can cave walls get to the game border ?
+cavewidthmin       = 0  -- how narrow can the cave get ?
+
+-- How long should each cave width last ? Eg:
 --  (20, 2) "at 20+,   narrow (by 1) every 2 cave steps"
 --  (10,10) "at 10-19, narrow every 10 steps"
 --  ( 8,50) "at 8-9,   narrow every 50 steps"
@@ -109,9 +127,10 @@ cavewidthdurations = [
   ,( 2,3)
   ]
 
-cavespeedinit  = 1     -- initial cave scrolling speed
+cavespeedinit  = 1     -- initial cave vertical speed (player's speed within the cave, really)
 cavespeedaccel = 1.01  -- multiply speed by this much each game tick (gravity)
 cavespeedbrake = 1     -- multiply speed by this much each player movement (autobraking)
+
 (playerymin, playerymax) = (0.4, 0.4)  -- player bounds relative to screen height, different bounds enables speed panning
 
 -- cavespeedinit  = 2            
@@ -135,8 +154,8 @@ type HighScores = M.Map (CaveNum, MaxSpeed) Score
 data CaveLine = CaveLine Column Column  -- left wall, right wall
 
 data GameState = GameState {
-   screenw         :: Width
-  ,screenh         :: Height
+   gamew           :: Width      -- width of the game  (but perhaps not the screen)
+  ,gameh           :: Height     -- height of the game (and usually the screen)
   ,gtick           :: Integer    -- current game tick
   ,highscore       :: Score      -- high score for the current cave and max speed
   ,score           :: Score      -- current score in this game
@@ -144,7 +163,7 @@ data GameState = GameState {
   ,randomgen       :: StdGen
   ,cavesteps       :: Integer    -- how many cave lines have been generated since game start
   ,cavelines       :: [CaveLine] -- recent cave segments for display, newest/bottom-most first
-  ,cavewidth       :: Width      -- current cave width
+  ,cavewidth       :: Width      -- current cave (space) inner width
   ,cavecenter      :: Column     -- current cave center
   ,cavespeed       :: Speed      -- current speed of cave scroll in steps/s, must be <= fps
   ,cavespeedmin    :: Speed      -- current minimum speed player can brake to
@@ -161,8 +180,8 @@ data GameState = GameState {
   }
 
 newGameState w h c rg hs maxspeed = GameState {
-   screenw         = w
-  ,screenh         = h
+   gamew           = w
+  ,gameh           = h
   ,gtick           = 0
   ,highscore       = hs
   ,score           = 0
@@ -189,11 +208,8 @@ newGameState w h c rg hs maxspeed = GameState {
 -------------------------------------------------------------------------------
 
 main = do
-  (_w,h) <- displaySize
-  let w = 80  -- for repeatable caves
-  highscores <- readHighScores
   args <- getArgs
-  when ("-h" `elem` args || "--help" `elem` args) $ exitWithUsage w h
+  when ("-h" `elem` args || "--help" `elem` args) $ exitWithUsage
   let
     defcavenum = 1
     defspeed   = 15
@@ -208,40 +224,44 @@ main = do
             "CAVE should be a natural number (received "++a++"), see --help)"
           speederr a = err $
             "SPEED should be 1-60 (received "++a++"), see --help)"
-  playloop w h highscores cavenum speed
 
-exitWithUsage w h = do
+  highscores <- readHighScores
+  repeatGame highscores cavenum speed
+
+exitWithUsage = do
   clearScreen
   setCursorPosition 0 0
-  putStr $ usage w h
+  (screenw,screenh) <- displaySize
+  putStr $ usage screenw screenh
   msox <- findExecutable "sox"
   putStr $ case msox of
              Nothing  -> soundHelpDisabled
              Just sox -> soundHelpEnabled sox
   exitSuccess  
 
-playloop :: Width -> Height -> HighScores -> CaveNum -> Float -> IO ()
-playloop w h highscores caveseed maxspeed = do
+-- Play the game repeatedly, saving new high scores when needed.
+repeatGame :: HighScores -> CaveNum -> Float -> IO ()
+repeatGame highscores caveseed maxspeed = do
+  playGameStart
+  (_,screenh) <- displaySize  -- use full screen height for each game (apparently last line is unusable on windows ? surely it's fine)
   let
     randomgen = mkStdGen caveseed
     highscore = fromMaybe 0 $ M.lookup (caveseed, round maxspeed) highscores
-  playStart
-  GameState{score,exit} <-
-    Terminal.Game.playGameS $
-    newGame w h caveseed randomgen highscore maxspeed
+    game = newGame screenh caveseed randomgen highscore maxspeed
+  GameState{score,exit} <- Terminal.Game.playGameS game
   let
     highscore'  = max score highscore
     highscores' = M.insert (caveseed, round maxspeed) highscore' highscores
   when (highscore' > highscore) $ writeHighScores highscores'
-  unless exit $ do
-    (w',h') <- displaySize
-    playloop w' h' highscores' caveseed maxspeed
+  repeatGame highscores' caveseed maxspeed & unless exit
 
-newGame screenw screenh cavenum rg hs maxspeed =
-  Game { gScreenWidth   = screenw,
-         gScreenHeight  = screenh-1,  -- last line is unusable on windows apparently
-         gFPS           = fps,
-         gInitState     = newGameState screenw screenh cavenum rg hs maxspeed,
+-- Initialise a new game (a cave run).
+newGame :: Height -> CaveNum -> StdGen -> Score -> Speed -> Game GameState
+newGame gameh cavenum rg hs maxspeed =
+  Game { gScreenWidth   = gamewidth, -- width used (and required) for drawing (a constant 80 for repeatable caves)
+         gScreenHeight  = gameh,     -- height used for drawing (the screen height)
+         gFPS           = fps,       -- target frames/game ticks per second
+         gInitState     = newGameState gamewidth gameh cavenum rg hs maxspeed,
          gLogicFunction = step,
          gDrawFunction  = draw,
          gQuitFunction  = quit
@@ -249,7 +269,7 @@ newGame screenw screenh cavenum rg hs maxspeed =
 
 -------------------------------------------------------------------------------
 
--- a high score for each cave seed is stored in the save file
+-- Read high scores for each cave seed and speed from the save file.
 readHighScores :: IO HighScores
 readHighScores = do
   savefile <- saveFilePath
@@ -259,7 +279,6 @@ readHighScores = do
     readDef (err $ "could not read high scores from\n"++savefile++"\nperhaps the format has changed, please move it out of the way")
     <$> readFile savefile
   else pure M.empty
-
 
 writeHighScores highscores = do
   savefile <- saveFilePath
@@ -278,6 +297,7 @@ quit g@GameState{..} =
   gameover && isExpired restarttimer && not pause  --  if the restart timer just ended and not paused
   || exit  -- or if q was pressed
 
+-- Handle input events.
 step g@GameState{..} (KeyPress k)
   | k == 'q'              = g { exit = True }
   | k `elem` "p ", pause  = g { pause = False }
@@ -287,11 +307,12 @@ step g@GameState{..} (KeyPress k)
         , cavespeed = max cavespeedmin (cavespeed * cavespeedbrake)
         }
   | k == rightkey, not (gameover || pause) =
-      g { playerx = min screenw (playerx + 1)
+      g { playerx = min gamew (playerx + 1)
         , cavespeed = max cavespeedmin (cavespeed * cavespeedbrake)
         }
   | otherwise = g
 
+-- Handle a tick event (game heartbeat). Most updates to game state happen here.
 step g@GameState{..} Tick =
   let
     -- gravity - gradually accelerate
@@ -388,9 +409,9 @@ stepCave GameState{..} =
       let
         x = cavecenter + randomdx
         (l,r) = caveWalls x cavewidth'
-        (cavemin,cavemax) = (margin, screenw - margin)
+        (cavemin,cavemax) = (margin, gamew - margin)
           where
-            margin = max cavemarginmin (screenw `div` 40)
+            margin = max cavemarginmin (gamew `div` 40)
       in
         if | l < cavemin -> cavemin + half cavewidth'
            | r > cavemax -> cavemax - half cavewidth'
@@ -398,7 +419,7 @@ stepCave GameState{..} =
 
     -- extend the cave, discarding old lines,
     -- except for an extra screenful that might be needed for speedpan
-    cavelines' = take (int screenh * 2) $ CaveLine l r : cavelines
+    cavelines' = take (int gameh * 2) $ CaveLine l r : cavelines
       where
         (l,r) = caveWalls cavecenter' cavewidth'
 
@@ -413,11 +434,11 @@ stepSpeedpan GameState{..} cavesteps' cavespeed' cavelines'
   | otherwise                       = speedpan
   where
     readytopan = 
-      length cavelines' >= int screenh
+      length cavelines' >= int gameh
       && cavesteps' `mod` 5 == 0
     idealpan =
       round $
-      float (playerYMax screenh - playerYMin screenh)
+      float (playerYMax gameh - playerYMin gameh)
       * (cavespeed'-cavespeedinit) / (cavespeedmax-cavespeedinit)
 
 -- increase score for every step deeper into the cave
@@ -438,14 +459,14 @@ newCaveTimer stepspersec = creaBoolTimer ticks
 caveWalls center width = (center - half width, center + half width)
 
 -- Player's current height above screen bottom.
-playerHeight GameState{..} = screenh - playery
+playerHeight GameState{..} = gameh - playery
 
 -- Player's current depth within the cave.
 playerDepth g@GameState{..} = max 0 (cavesteps - playerHeight g)
 
 -- Calculate the player's minimum and maximum y coordinate.
-playerYMin screenh = round $ playerymin * float screenh
-playerYMax screenh = round $ playerymax * float screenh
+playerYMin gameh = round $ playerymin * float gameh
+playerYMax gameh = round $ playerymax * float gameh
 
 -- Convert seconds to game ticks based on global frame rate.
 secsToTicks :: Float -> Integer
@@ -467,16 +488,16 @@ err = errorWithoutStackTrace
 -------------------------------------------------------------------------------
 
 draw g@GameState{..} =
-    blankPlane screenw screenh
-  & (max 1 (screenh - toInteger (length cavelines)), 1) % drawCave g
-  -- & (1, 1)          % blankPlane screenw 1
+    blankPlane gamew gameh
+  & (max 1 (gameh - toInteger (length cavelines)), 1) % drawCave g
+  -- & (1, 1)          % blankPlane gamew 1
   & (1, titlex)     % drawTitle g
   & (1, cavenamex)  % drawCaveName g
   & (3, helpx)      % drawHelp g
   & (1, highscorex) % drawHighScore g
   & (1, scorex)     % drawScore g
   & (1, speedx)     % drawSpeed g
-  -- & (3, screenw - 13) % drawStats g
+  -- & (3, gamew - 13) % drawStats g
   & (playery+speedpan, playerx) % drawPlayer g
   where
     titlew     = 12
@@ -487,24 +508,24 @@ draw g@GameState{..} =
 
     titlex     = 1
     helpx      = 1
-    speedx     = screenw - speedw + 1
+    speedx     = gamew - speedw + 1
     scorex     = highscorex + highscorew + half (speedx - (highscorex + highscorew)) - half scorew
-    highscorex = half screenw - half highscorew
+    highscorex = half gamew - half highscorew
     cavenamex  = min (highscorex - cavenamew) (half (highscorex - (titlex+titlew)) + titlex + titlew - half cavenamew)
 
 drawCave GameState{..} =
   vcat $
-  map (drawCaveLine screenw) $
+  map (drawCaveLine gamew) $
   reverse $
-  take (int screenh) $
+  take (int gameh) $
   drop (int speedpan) cavelines
 
-drawCaveLine screenw (CaveLine left right) = stringPlane line
+drawCaveLine gamew (CaveLine left right) = stringPlane line
   where
     line = concat [
        replicate (int left) wallchar
       ,replicate (int $ right - left) spacechar
-      ,replicate (int $ screenw - right ) wallchar
+      ,replicate (int $ gamew - right ) wallchar
       ]
 
 drawPlayer GameState{..} =
@@ -550,8 +571,6 @@ drawStats g@GameState{..} =
 -------------------------------------------------------------------------------
 
 -- Play sounds with sox (http://sox.sourceforge.net), it it's in PATH.
--- Most of these are non-blocking, freely forking new threads to play sounds,
--- with no cleanup; sounds are assumed to be short and harmless.
 -- Limitations:
 -- - exit status is discarded; we don't know if sox is installed or succeeded
 -- - there is a short gap between tones played in a sequence
@@ -607,7 +626,7 @@ isoTones t freqs = [(f,t) | f <- freqs]
 
 -- sound effects
 
-playStart =
+playGameStart =
   repeatTones 2 $ isoTones 100 $ [100,200,400,200]
 
 playDepthCue depth = do
