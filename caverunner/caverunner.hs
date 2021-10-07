@@ -153,6 +153,14 @@ type HighScores = M.Map (CaveNum, MaxSpeed) Score
 
 data CaveLine = CaveLine Column Column  -- left wall, right wall
 
+-- Coordinates within the on-screen game drawing area, from 1,1 at top left.
+type GameRow = Row
+type GameCol = Column
+
+-- Coordinates within the cave, from 1,1 at the cave mouth's midpoint.
+type CaveRow = Row
+type CaveCol = Column
+
 data GameState = GameState {
    gamew           :: Width      -- width of the game  (but perhaps not the screen)
   ,gameh           :: Height     -- height of the game (and usually the screen)
@@ -162,16 +170,16 @@ data GameState = GameState {
   ,cavenum         :: CaveNum
   ,randomgen       :: StdGen
   ,cavesteps       :: Integer    -- how many cave lines have been generated since game start
-  ,cavelines       :: [CaveLine] -- recent cave segments for display, newest/bottom-most first
-  ,cavewidth       :: Width      -- current cave (space) inner width
-  ,cavecenter      :: Column     -- current cave center
+  ,cavelines       :: [CaveLine] -- recent cave lines, for display; newest/bottom-most first
+  ,cavewidth       :: Width      -- current cave width (inner space between the walls)
+  ,cavecenter      :: GameCol    -- current x coordinate in game area of the cave's horizontal midpoint
   ,cavespeed       :: Speed      -- current speed of cave scroll in steps/s, must be <= fps
   ,cavespeedmin    :: Speed      -- current minimum speed player can brake to
   ,cavespeedmax    :: Speed      -- maximum speed player can accelerate to (an integer), must be <= fps
   ,cavetimer       :: Timed Bool -- delay before next cave scroll
   ,speedpan        :: Height     -- current number of rows to pan the viewport down, based on current speed
-  ,playery         :: Row
-  ,playerx         :: Column
+  ,playery         :: GameRow    -- player's y coordinate in game area
+  ,playerx         :: GameCol    -- player's x coordinate in game area
   ,playerchar      :: Char
   ,gameover        :: Bool       -- player has crashed ?
   ,restarttimer    :: Timed Bool -- delay before restart after player crash
@@ -458,15 +466,18 @@ newCaveTimer stepspersec = creaBoolTimer ticks
 -- Calculate the cave's left and right wall coordinates from center and width.
 caveWalls center width = (center - half width, center + half width)
 
--- Player's current height above screen bottom.
+-- Player's minimum and maximum y coordinate in the game drawing area.
+playerYMin, playerYMax :: Height -> GameRow
+playerYMin gameh = round $ playerymin * float gameh
+playerYMax gameh = round $ playerymax * float gameh
+
+-- Player's current height above bottom of the game drawing area.
+playerHeight :: GameState -> GameRow
 playerHeight GameState{..} = gameh - playery
 
 -- Player's current depth within the cave.
+playerDepth :: GameState -> CaveRow
 playerDepth g@GameState{..} = max 0 (cavesteps - playerHeight g)
-
--- Calculate the player's minimum and maximum y coordinate.
-playerYMin gameh = round $ playerymin * float gameh
-playerYMax gameh = round $ playerymax * float gameh
 
 -- Convert seconds to game ticks based on global frame rate.
 secsToTicks :: Float -> Integer
