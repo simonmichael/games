@@ -52,17 +52,14 @@ but couldn't easily get user input.
 
 ## Roadmap/Wishlist
 
+- autohide/show help
 - show crash sites
-- game mechanics / increase fun
-  - something rewarding at the bottom
-  - braking thrusters, with limited fuel
-    - activated by a modifier key when those are available
-    - otherwise by toggling left/right ?
-  - auto speedup/slowdown in next game ?
-  - return flight to the top ?
-- better use of colour ?
-- attract mode
-  - high scores
+- more sideways cave movement
+- braking thrusters, with limited fuel
+  - activated by a modifier key when those are available
+  - otherwise by toggling left/right ?
+- something rewarding at the bottom
+- better use of colour ? light/dark schemes ? cf Terminal.app silver aerogel
 - sound effects
   - game start
   - depth cues
@@ -72,7 +69,14 @@ but couldn't easily get user input.
   - quit
   - wind noise (in caves with atmospheres, rising with speed)
   - "near miss"
+- attract mode / show high scores
+- auto speedup/slowdown in next game ?
+- measure & show actual frame rate
 - 1.0 release
+- return flight to the top ?
+- more varied caves and flight mechanics
+- high score sharing / server
+- document vs code+hls setup, dev workflows
 - better sound support
   - continuous/dynamic length sounds (keep playing thruster sound until player stops)
   - legato melodies (play notes with no gaps)
@@ -80,7 +84,3 @@ but couldn't easily get user input.
   - sound check mode (and video check if useful) to help with setup
   - try soxlib with graceful fallback
   - try sdl-mixer with graceful fallback
-- more colour
-- more varied caves and flight mechanics
-- high score sharing / server
-- document vs code+hls setup, dev workflows
