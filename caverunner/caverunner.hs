@@ -506,7 +506,7 @@ draw g@GameState{..} =
   -- & (1, 1)          % blankPlane gamew 1
   & (1, titlex)     % drawTitle g
   & (1, cavenamex)  % drawCaveName g
-  & (3, helpx)      % drawHelp g
+  & (if cavesteps < 25 || pause then (3, helpx) % drawHelp g else id)
   & (1, highscorex) % drawHighScore g
   & (1, scorex)     % drawScore g
   & (1, speedx)     % drawSpeed g
