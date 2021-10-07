@@ -146,20 +146,21 @@ cavespeedbrake = 1     -- multiply speed by this much each player movement (auto
 -------------------------------------------------------------------------------
 
 type CaveNum    = Int    -- the number of a cave (and its random seed)
-type MaxSpeed   = Int    -- the maximum scroll speed of a cave / falling speed of player
+type MaxSpeed   = Int    -- a maximum dive/scroll speed in a cave
 type Speed      = Float
 type Score      = Integer
 type HighScores = M.Map (CaveNum, MaxSpeed) Score
-
-data CaveLine = CaveLine Column Column  -- left wall, right wall
 
 -- Coordinates within the on-screen game drawing area, from 1,1 at top left.
 type GameRow = Row
 type GameCol = Column
 
--- Coordinates within the cave, from 1,1 at the cave mouth's midpoint.
+-- Coordinates within a cave, from 1,1 at the cave mouth's midpoint.
 type CaveRow = Row
 type CaveCol = Column
+
+-- One line within a cave, with its left/right wall positions.
+data CaveLine = CaveLine GameCol GameCol
 
 data GameState = GameState {
    gamew           :: Width      -- width of the game  (but perhaps not the screen)
@@ -173,9 +174,9 @@ data GameState = GameState {
   ,cavelines       :: [CaveLine] -- recent cave lines, for display; newest/bottom-most first
   ,cavewidth       :: Width      -- current cave width (inner space between the walls)
   ,cavecenter      :: GameCol    -- current x coordinate in game area of the cave's horizontal midpoint
-  ,cavespeed       :: Speed      -- current speed of cave scroll in steps/s, must be <= fps
+  ,cavespeed       :: Speed      -- current speed of player dive/cave scroll in lines/s, must be <= fps
   ,cavespeedmin    :: Speed      -- current minimum speed player can brake to
-  ,cavespeedmax    :: Speed      -- maximum speed player can accelerate to (an integer), must be <= fps
+  ,cavespeedmax    :: Speed      -- maximum speed player can accelerate to, must be <= fps
   ,cavetimer       :: Timed Bool -- delay before next cave scroll
   ,speedpan        :: Height     -- current number of rows to pan the viewport down, based on current speed
   ,playery         :: GameRow    -- player's y coordinate in game area
@@ -248,7 +249,7 @@ exitWithUsage = do
   exitSuccess  
 
 -- Play the game repeatedly, saving new high scores when needed.
-repeatGame :: HighScores -> CaveNum -> Float -> IO ()
+repeatGame :: HighScores -> CaveNum -> Speed -> IO ()
 repeatGame highscores caveseed maxspeed = do
   playGameStart
   (_,screenh) <- displaySize  -- use full screen height for each game (apparently last line is unusable on windows ? surely it's fine)
