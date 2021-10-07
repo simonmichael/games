@@ -452,9 +452,10 @@ stepSpeedpan GameState{..} cavesteps' cavespeed' cavelines'
 
 -- increase score for every step deeper into the cave
 stepScore g@GameState{..} cavesteps'
-  | cavesteps' >= playerHeight g = score + 1
-  | otherwise                    = score
-
+  | insidecave = score + 1
+  | otherwise  = score
+  where
+    insidecave = cavesteps' > playerHeight g
 -------------------------------------------------------------------------------
 
 -- Create a timer for the next cave step, given the desired steps/s.
@@ -501,7 +502,7 @@ err = errorWithoutStackTrace
 
 draw g@GameState{..} =
     blankPlane gamew gameh
-  & (max 1 (gameh - toInteger (length cavelines)), 1) % drawCave g
+  & (max 1 (gameh - toInteger (length cavelines) + 1), 1) % drawCave g
   -- & (1, 1)          % blankPlane gamew 1
   & (1, titlex)     % drawTitle g
   & (1, cavenamex)  % drawCaveName g
