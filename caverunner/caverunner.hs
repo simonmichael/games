@@ -108,7 +108,7 @@ restartdelaysecs   = 5
 
 -}
 
--- parameters affecting cave procedural generation, keep these (and stepCave) the same for repeatable caves
+-- parameters affecting cave procedural generation, keep these and stepCave the same for repeatable caves
 gamewidth     = 80     -- how many columns to use (and require) for the game ? Can reduce it during development
 cavemarginmin = 2      -- how close can cave walls get to the game edge ?
 cavewidthinit = 40     -- how wide should the cave mouth be ?
@@ -124,11 +124,10 @@ cavewidthdurations = [ -- how long should the various cave widths last ?
   ,( 3,10)
   ,( 2,3)
   ]
--- Eg:
---  (20, 2) "at 20+,   narrow (by 1) every 2 cave steps"
---  (10,10) "at 10-19, narrow every 10 steps"
---  ( 8,50) "at 8-9,   narrow every 50 steps"
-
+-- (W,N): at width >= W, narrow (by 1) every N cave lines. Eg:
+--  (20, 2) "at 20+,   narrow (by 1) every 2 lines"
+--  (10,10) "at 10-19, narrow every 10 lines"
+--  ( 8,50) "at 8-9,   narrow every 50 lines"
 
 cavespeedinit  = 1     -- initial cave vertical speed (player's speed within the cave, really)
 cavespeedaccel = 1.01  -- multiply speed by this much each game tick (gravity)
@@ -252,7 +251,7 @@ exitWithUsage = do
   putStr $ case msox of
              Nothing  -> soundHelpDisabled
              Just sox -> soundHelpEnabled sox
-  exitSuccess  
+  exitSuccess
 
 -- Generate the cave just like the game would, printing each line to stdout.
 -- Optionally, limit to just the first N lines.
@@ -431,7 +430,8 @@ stepCave GameState{..} =
   ,cavewidth'
   ,randomgen'
   ,cavecenter'
-  ,cavelines')
+  ,cavelines'
+  )
   where
     cavesteps' = cavesteps + 1
 
@@ -478,7 +478,7 @@ stepSpeedpan GameState{..} cavesteps' cavespeed' cavelines'
   | speedpan > idealpan, readytopan = speedpan-1
   | otherwise                       = speedpan
   where
-    readytopan = 
+    readytopan =
       length cavelines' >= int gameh
       && cavesteps' `mod` 5 == 0
     idealpan =
@@ -532,10 +532,10 @@ int = fromIntegral
 
 err = errorWithoutStackTrace
 
--- Execute an IO action, using unsafePerformIO, before evaluating the
--- second argument.
-unsafeio :: IO a -> b -> b
-unsafeio = seq . unsafePerformIO
+-- -- Execute an IO action, using unsafePerformIO, before evaluating the
+-- -- second argument.
+-- unsafeio :: IO a -> b -> b
+-- unsafeio = seq . unsafePerformIO
 
 -- Execute an IO action, typically one that plays a sound asynchronously,
 -- before evaluating the second argument, unless sound is disabled.
@@ -692,14 +692,14 @@ repeatTones n tones = playTones $ concat $ replicate n tones
 
 
 -- Generate a sequence of same-duration tones from a duration and a list of frequencies.
-isoTones :: Ms -> [Hz] -> [Tone]
-isoTones t freqs = [(f,t) | f <- freqs]
+mkTones :: Ms -> [Hz] -> [Tone]
+mkTones t freqs = [(f,t) | f <- freqs]
 
 
--- Sound effects. These return immediately, playing the sound in a background thread.
+-- Sound effects. These normally play sound(s) asynchronously, and return immediately.
 
 gameStartSound =
-  repeatTones 2 $ isoTones 100 $ [100,200,400,200]
+  repeatTones 2 $ mkTones 100 $ [100,200,400,200]
 
 depthCueSound depth = do
   playTone (100  + float depth, 150)
