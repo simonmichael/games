@@ -359,7 +359,7 @@ step g@GameState{..} Tick =
     g' = g{gtick     = gtick+1}
     -- has player crashed ?
     gameover' =
-      case cavelines `atMay` int (playerHeight g - 1) of
+      case cavelines `atMay` int (playerHeight g) of
         Nothing             -> False
         Just (CaveLine l r) -> playerx <= l || playerx > r
 
