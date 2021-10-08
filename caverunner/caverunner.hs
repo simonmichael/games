@@ -80,7 +80,7 @@ soundHelpDisabled = unlines [
   ,"apt install sox / brew install sox / choco install sox.portable / etc."
   ]
 soundHelpEnabled soxpath = unlines [
-   "Sound effects are enabled, using " ++ soxpath ++ "."
+   "Sound effects are enabled, using " ++ soxpath ++ ". --no-sound to disable."
   ]
 
 -------------------------------------------------------------------------------
@@ -253,7 +253,7 @@ exitWithUsage = do
 -- Play the game repeatedly, saving new high scores when needed.
 repeatGame :: CaveNum -> Speed -> HighScores -> IO ()
 repeatGame cavenum maxspeed highscores = do
-  playGameStart
+  when soundEnabled $ gameStartSound
   (_,screenh) <- displaySize  -- use full screen height for each game (apparently last line is unusable on windows ? surely it's fine)
   let
     highscore = fromMaybe 0 $ M.lookup (cavenum, round maxspeed) highscores
@@ -345,7 +345,7 @@ step g@GameState{..} Tick =
         g'
 
       | not gameover && gameover' ->  -- newly crashed
-        unsafeio playCrash $
+        unsafePlay crashSound $
         g'{gameover     = True
           ,highscore    = max score highscore
           ,restarttimer = reset restarttimer
@@ -366,7 +366,7 @@ step g@GameState{..} Tick =
           score'       = stepScore    g' cavesteps'
         in
           (if cavesteps `mod` 5 == 2
-           then unsafeio (playDepthCue cavesteps')
+           then unsafePlay (depthCueSound cavesteps')
            else id) $
           g'{randomgen       = randomgen'
             ,score           = score'
@@ -495,9 +495,25 @@ float = fromInteger
 int :: Integer -> Int
 int = fromIntegral
 
+err = errorWithoutStackTrace
+
+-- Execute an IO action, using unsafePerformIO, before evaluating the
+-- second argument.
+unsafeio :: IO a -> b -> b
 unsafeio = seq . unsafePerformIO
 
-err = errorWithoutStackTrace
+-- Execute an IO action, typically one that plays a sound asynchronously,
+-- before evaluating the second argument, unless sound is disabled.
+-- Uses unsafePerformIO.
+unsafePlay :: IO a -> b -> b
+unsafePlay a = if soundEnabled then seq (unsafePerformIO a) else id
+
+-- Check whether sounds should be played - true unless the program was
+-- run with the --no-sound flag. Uses unsafePerformIO. Won't change in a GHCI session.
+-- {-# OPTIONS_GHC -fno-cse #-}
+-- {-# NOINLINE soundEnabled #-}
+soundEnabled :: Bool
+soundEnabled = not $ "--no-sound" `elem` unsafePerformIO getArgs
 
 -------------------------------------------------------------------------------
 
@@ -638,16 +654,17 @@ repeatTones n tones = playTones $ concat $ replicate n tones
 isoTones :: Ms -> [Hz] -> [Tone]
 isoTones t freqs = [(f,t) | f <- freqs]
 
--- sound effects
 
-playGameStart =
+-- Sound effects. These return immediately, playing the sound in a background thread.
+
+gameStartSound =
   repeatTones 2 $ isoTones 100 $ [100,200,400,200]
 
-playDepthCue depth = do
+depthCueSound depth = do
   playTone (100  + float depth, 150)
   playTone (1000 - float depth, 150)
 
-playCrash = do
+crashSound = do
   playTone (100,1000)
   playTone (200,1000)
   playTone (300,1000)
