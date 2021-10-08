@@ -108,18 +108,12 @@ restartdelaysecs   = 5
 
 -}
 
-gamewidth = 80  -- How many columns to use (and require) for the game. 
-                -- Changing this can change the procedurally-generated caves.
-                -- Can reduce it to support narrower windows during development.
-
-cavemarginmin      = 2  -- how close can cave walls get to the game border ?
-cavewidthmin       = 0  -- how narrow can the cave get ?
-
--- How long should each cave width last ? Eg:
---  (20, 2) "at 20+,   narrow (by 1) every 2 cave steps"
---  (10,10) "at 10-19, narrow every 10 steps"
---  ( 8,50) "at 8-9,   narrow every 50 steps"
-cavewidthdurations = [
+-- parameters affecting cave procedural generation, keep these (and stepCave) the same for repeatable caves
+gamewidth     = 80     -- how many columns to use (and require) for the game ? Can reduce it during development
+cavemarginmin = 2      -- how close can cave walls get to the game edge ?
+cavewidthinit = 40     -- how wide should the cave mouth be ?
+cavewidthmin  = 0      -- how narrow can the cave get ?
+cavewidthdurations = [ -- how long should the various cave widths last ?
    (20,3)
   ,(10,10)
   ,( 8,50)
@@ -130,6 +124,11 @@ cavewidthdurations = [
   ,( 3,10)
   ,( 2,3)
   ]
+-- Eg:
+--  (20, 2) "at 20+,   narrow (by 1) every 2 cave steps"
+--  (10,10) "at 10-19, narrow every 10 steps"
+--  ( 8,50) "at 8-9,   narrow every 50 steps"
+
 
 cavespeedinit  = 1     -- initial cave vertical speed (player's speed within the cave, really)
 cavespeedaccel = 1.01  -- multiply speed by this much each game tick (gravity)
@@ -203,7 +202,7 @@ newGameState w h cavenum maxspeed hs = GameState {
   ,randomgen       = mkStdGen cavenum
   ,cavesteps       = 0
   ,cavelines       = []
-  ,cavewidth       = 40  -- for repeatable caves
+  ,cavewidth       = cavewidthinit
   ,cavecenter      = half w
   ,cavespeed       = cavespeedinit
   ,cavespeedmin    = cavespeedinit * 2
@@ -452,9 +451,7 @@ stepCave GameState{..} =
       let
         x = cavecenter + randomdx
         (l,r) = caveWalls x cavewidth'
-        (cavemin,cavemax) = (margin, gamew - margin)
-          where
-            margin = max cavemarginmin (gamew `div` 40)
+        (cavemin,cavemax) = (cavemarginmin, gamew - cavemarginmin)
       in
         if | l < cavemin -> cavemin + half cavewidth'
            | r > cavemax -> cavemax - half cavewidth'
