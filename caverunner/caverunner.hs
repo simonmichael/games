@@ -325,14 +325,7 @@ step g@GameState{..} (KeyPress k)
 -- Handle a tick event (game heartbeat). Most updates to game state happen here.
 step g@GameState{..} Tick =
   let
-    -- gravity - gradually accelerate
-    cavespeed' | pause     = cavespeed
-               | otherwise = min cavespeedmax (cavespeed * cavespeedaccel)
-
-    g' = g{gtick     = gtick+1
-          ,cavespeed = cavespeed'
-          }
-
+    g' = g{gtick     = gtick+1}
     -- has player crashed ?
     gameover' =
       case cavelines `atMay` int (playerHeight g - 1) of
@@ -356,6 +349,7 @@ step g@GameState{..} Tick =
 
       | isExpired cavetimer ->  -- time to step the cave
         let
+          cavespeed' = stepSpeed g'
           (cavesteps',
            cavespeedmin',
            cavewidth',
@@ -382,7 +376,13 @@ step g@GameState{..} Tick =
             }
 
       | otherwise ->  -- time is passing
-        g'{cavetimer = tick cavetimer}
+        g'{cavetimer = tick cavetimer
+          ,cavespeed = stepSpeed g'
+          }
+
+-- gravity - gradually accelerate
+stepSpeed :: GameState -> Speed
+stepSpeed GameState{..} = min cavespeedmax (cavespeed * cavespeedaccel)
 
 stepCave GameState{..} =
   (cavesteps'
