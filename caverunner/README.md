@@ -53,6 +53,8 @@ but couldn't easily get user input.
 ## Roadmap/Wishlist
 
 - more sideways cave movement
+- alternate player control schemes
+  - accelerate sideways ?
 - something rewarding at the bottom
 - better use of colour ? light/dark schemes ? cf Terminal.app silver aerogel
 - sound effects
