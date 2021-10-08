@@ -265,12 +265,12 @@ printCave cavenum mlimit = do
       when (cavewidth > 0) $ do
         let
           (cavesteps',
-           cavespeedmin',
            cavewidth',
            randomgen',
            cavecenter',
            cavelines'@(l:_)) = stepCave g
-          cavespeed'         = stepSpeed g
+          (cavespeed',
+           cavespeedmin') = stepSpeed g
         putStrLn $ showCaveLineWithNum gamewidth l cavesteps'
         go (fmap (subtract 1) mremaining)
            g{randomgen    = randomgen'
@@ -381,9 +381,9 @@ step g@GameState{..} Tick =
 
       | isExpired cavetimer ->  -- time to step the cave
         let
-          cavespeed' = stepSpeed g'
+          (cavespeed',
+           cavespeedmin') = stepSpeed g
           (cavesteps',
-           cavespeedmin',
            cavewidth',
            randomgen',
            cavecenter',
@@ -394,41 +394,46 @@ step g@GameState{..} Tick =
           (if cavesteps `mod` 5 == 2
            then unsafePlay (depthCueSound cavesteps')
            else id) $
-          g'{randomgen       = randomgen'
-            ,score           = score'
-            ,speedpan        = speedpan'
-            ,cavesteps       = cavesteps'
-            ,cavelines       = cavelines'
-            ,cavewidth       = cavewidth'
-            ,cavecenter      = cavecenter'
-            ,cavespeed       = cavespeed'
-            ,cavespeedmin    = cavespeedmin'
-            ,cavetimer       = newCaveTimer cavespeed'
-            ,gameover        = gameover'
+          g'{randomgen    = randomgen'
+            ,score        = score'
+            ,speedpan     = speedpan'
+            ,cavesteps    = cavesteps'
+            ,cavelines    = cavelines'
+            ,cavewidth    = cavewidth'
+            ,cavecenter   = cavecenter'
+            ,cavespeed    = cavespeed'
+            ,cavespeedmin = cavespeedmin'
+            ,cavetimer    = newCaveTimer cavespeed'
+            ,gameover     = gameover'
             }
 
       | otherwise ->  -- time is passing
-        g'{cavetimer = tick cavetimer
-          ,cavespeed = stepSpeed g'
-          }
+        let
+          (cavespeed',
+           cavespeedmin') = stepSpeed g
+        in
+          g'{cavetimer    = tick cavetimer
+            ,cavespeed    = cavespeed'
+            ,cavespeedmin = cavespeedmin'
+            }
 
--- gravity - gradually accelerate
-stepSpeed :: GameState -> Speed
-stepSpeed GameState{..} = min cavespeedmax (cavespeed * cavespeedaccel)
+stepSpeed :: GameState -> (Speed, Speed)
+stepSpeed GameState{..} = (speed', minspeed')
+  where
+    -- gravity - gradually accelerate
+    speed' = min cavespeedmax (cavespeed * cavespeedaccel)
+    -- hurryup - slowly increase minimum speed ?
+    -- minspeed' = cavespeedinit * 2 + float (cavesteps `div` 100)
+    minspeed' = cavespeedmin
 
 stepCave GameState{..} =
   (cavesteps'
-  ,cavespeedmin'
   ,cavewidth'
   ,randomgen'
   ,cavecenter'
   ,cavelines')
   where
     cavesteps' = cavesteps + 1
-
-    -- hurryup - slowly increase minimum speed ?
-    -- cavespeedmin' = cavespeedinit * 2 + float (cavesteps `div` 100)
-    cavespeedmin' = cavespeedmin
 
     -- narrowing - gradually narrow cave
     cavewidth'
