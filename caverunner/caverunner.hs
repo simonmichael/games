@@ -262,22 +262,22 @@ printCave cavenum = do
     go g@GameState{..} =
       when (cavewidth > 0) $ do
         let
-          cavespeed' = stepSpeed g
           (cavesteps',
            cavespeedmin',
            cavewidth',
            randomgen',
            cavecenter',
            cavelines'@(l:_)) = stepCave g
+          cavespeed'         = stepSpeed g
         putStrLn $ showCaveLineWithNum gamewidth l cavesteps'
-        go g{randomgen       = randomgen'
-           ,cavesteps       = cavesteps'
-           ,cavelines       = cavelines'
-           ,cavewidth       = cavewidth'
-           ,cavecenter      = cavecenter'
-           ,cavespeed       = cavespeed'
-           ,cavespeedmin    = cavespeedmin'
-           }
+        go g{randomgen    = randomgen'
+            ,cavesteps    = cavesteps'
+            ,cavelines    = cavelines'
+            ,cavewidth    = cavewidth'
+            ,cavecenter   = cavecenter'
+            ,cavespeed    = cavespeed'
+            ,cavespeedmin = cavespeedmin'
+            }
 
 -- Play the game repeatedly, saving new high scores when needed.
 repeatGame :: CaveNum -> Speed -> HighScores -> IO ()
