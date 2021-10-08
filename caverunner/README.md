@@ -52,12 +52,7 @@ but couldn't easily get user input.
 
 ## Roadmap/Wishlist
 
-- autohide/show help
-- show crash sites
 - more sideways cave movement
-- braking thrusters, with limited fuel
-  - activated by a modifier key when those are available
-  - otherwise by toggling left/right ?
 - something rewarding at the bottom
 - better use of colour ? light/dark schemes ? cf Terminal.app silver aerogel
 - sound effects
@@ -70,9 +65,14 @@ but couldn't easily get user input.
   - wind noise (in caves with atmospheres, rising with speed)
   - "near miss"
 - attract mode / show high scores
-- auto speedup/slowdown in next game ?
 - measure & show actual frame rate
 - 1.0 release
+- show crash sites
+- save crash sites
+- braking thrusters, with limited fuel
+  - activated by a modifier key when those are available
+  - otherwise by toggling left/right ?
+- auto speedup/slowdown in next game ?
 - return flight to the top ?
 - more varied caves and flight mechanics
 - high score sharing / server
