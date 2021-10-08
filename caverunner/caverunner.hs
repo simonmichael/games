@@ -29,6 +29,7 @@
 import Control.Applicative
 import Control.Concurrent
 import Control.Monad
+import Data.Function (fix)
 import Data.List
 import qualified Data.Map as M
 import Data.Maybe
@@ -64,8 +65,9 @@ usage w h = banner ++ unlines [
   ,"Fly fast, avoid the walls!"
   ,""
   ,"Usage:"
-  ,"$ ./caverunner[.hs] ...        # play [& update the caverunner binary]"
+  ,"$ ./caverunner.hs [ARGS]       # update the `caverunner` binary, then run it"
   ,"$ ./caverunner [CAVE [SPEED]]  # play, maybe changing cave (1) & max speed (15)"
+  ,"$ ./caverunner --print-cave [CAVE]  # print the full cave (on stderr)"
   ,"$ ./caverunner -h|--help       # show this help"
   ,""
   ,"Each CAVE has a high score (the max depth achieved) for each max speed."
@@ -225,8 +227,9 @@ main = do
   let
     defcavenum = 1
     defspeed   = 15
+    (flags, args') = partition ("-" `isPrefixOf`) args
     (cavenum, speed) =
-      case args of
+      case args' of
         []    -> (defcavenum, defspeed)
         [c]   -> (readDef (caveerr c) c, defspeed)
         [c,s] -> (readDef (caveerr c) c, readDef (speederr s) s)
@@ -236,8 +239,9 @@ main = do
             "CAVE should be a natural number (received "++a++"), see --help)"
           speederr a = err $
             "SPEED should be 1-60 (received "++a++"), see --help)"
-
-  readHighScores >>= repeatGame cavenum speed
+  if "--print-cave" `elem` flags
+  then printCave cavenum
+  else readHighScores >>= repeatGame cavenum speed
 
 exitWithUsage = do
   clearScreen
@@ -249,6 +253,36 @@ exitWithUsage = do
              Nothing  -> soundHelpDisabled
              Just sox -> soundHelpEnabled sox
   exitSuccess  
+
+-- Generate the cave just like the game would, printing each line to stdout.
+printCave cavenum = do
+  let ginit = newGameState gamewidth 25 cavenum 15 0
+  -- fix & trace-based loop - not easy to read but avoids adding yet another package..
+  fix (
+    \rec g ->
+      if cavewidth g <= 0
+      then g
+      else rec (
+        let
+          cavespeed' = stepSpeed g
+          (cavesteps',
+           cavespeedmin',
+           cavewidth',
+           randomgen',
+           cavecenter',
+           cavelines'@(l:_)) = stepCave g
+        in
+          trace (showCaveLineWithNum gamewidth l cavesteps') $
+          g{randomgen       = randomgen'
+           ,cavesteps       = cavesteps'
+           ,cavelines       = cavelines'
+           ,cavewidth       = cavewidth'
+           ,cavecenter      = cavecenter'
+           ,cavespeed       = cavespeed'
+           ,cavespeedmin    = cavespeedmin'
+           })
+    ) $ trace (progname ++ " cave "++show cavenum) ginit
+  `seq` return ()
 
 -- Play the game repeatedly, saving new high scores when needed.
 repeatGame :: CaveNum -> Speed -> HighScores -> IO ()
@@ -550,13 +584,19 @@ drawCave GameState{..} =
   take (int gameh) $
   drop (int speedpan) cavelines
 
-drawCaveLine gamew (CaveLine left right) = stringPlane line
+drawCaveLine gamew line = stringPlane $ showCaveLine gamew line
+
+showCaveLine gamew (CaveLine left right) =
+  concat [
+    replicate (int left) wallchar
+   ,replicate (int $ right - left) spacechar
+   ,replicate (int $ gamew - right ) wallchar
+   ]
+
+showCaveLineWithNum gamew l n =
+  num ++ drop (length num) (showCaveLine gamew l  )
   where
-    line = concat [
-       replicate (int left) wallchar
-      ,replicate (int $ right - left) spacechar
-      ,replicate (int $ gamew - right ) wallchar
-      ]
+    num = show n
 
 drawPlayer GameState{..} =
   cell char #bold #color hue Vivid
