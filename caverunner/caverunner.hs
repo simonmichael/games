@@ -7,6 +7,7 @@
   --package directory
   --package filepath
   --package linebreak
+  --package pretty-simple
   --package process
   --package safe
   --package timers-tick
@@ -42,6 +43,7 @@ import System.IO
 import System.IO.Unsafe (unsafePerformIO)
 import System.Process
 import Terminal.Game
+import Text.Pretty.Simple (pPrint)
 import Text.Printf
 
 -------------------------------------------------------------------------------
@@ -160,7 +162,7 @@ type CaveRow = Row
 type CaveCol = Column
 
 -- One line within a cave, with its left/right wall positions.
-data CaveLine = CaveLine GameCol GameCol
+data CaveLine = CaveLine GameCol GameCol deriving (Show)
 
 data GameState = GameState {
    gamew           :: Width      -- width of the game  (but perhaps not the screen)
@@ -187,6 +189,7 @@ data GameState = GameState {
   ,pause           :: Bool       -- keep the game paused ?
   ,exit            :: Bool       -- completely exit the app ?
   }
+  deriving (Show)
 
 newGameState w h cavenum maxspeed hs = GameState {
    gamew           = w
