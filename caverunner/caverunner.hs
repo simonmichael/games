@@ -67,7 +67,7 @@ usage w h = banner ++ unlines [
   ,"Usage:"
   ,"$ ./caverunner.hs [ARGS]       # update the `caverunner` binary, then run it"
   ,"$ ./caverunner [CAVE [SPEED]]  # play, maybe changing cave (1) & max speed (15)"
-  ,"$ ./caverunner --print-cave [CAVE]  # print the full cave (on stderr)"
+  ,"$ ./caverunner --print-cave [CAVE]  # print the full cave"
   ,"$ ./caverunner -h|--help       # show this help"
   ,""
   ,"Each CAVE has a high score (the max depth achieved) for each max speed."
@@ -256,13 +256,11 @@ exitWithUsage = do
 
 -- Generate the cave just like the game would, printing each line to stdout.
 printCave cavenum = do
-  let ginit = newGameState gamewidth 25 cavenum 15 0
-  -- fix & trace-based loop - not easy to read but avoids adding yet another package..
-  fix (
-    \rec g ->
-      if cavewidth g <= 0
-      then g
-      else rec (
+  putStrLn $ progname ++ " cave "++show cavenum
+  go $ newGameState gamewidth 25 cavenum 15 0
+  where
+    go g@GameState{..} =
+      when (cavewidth > 0) $ do
         let
           cavespeed' = stepSpeed g
           (cavesteps',
@@ -271,18 +269,15 @@ printCave cavenum = do
            randomgen',
            cavecenter',
            cavelines'@(l:_)) = stepCave g
-        in
-          trace (showCaveLineWithNum gamewidth l cavesteps') $
-          g{randomgen       = randomgen'
+        putStrLn $ showCaveLineWithNum gamewidth l cavesteps'
+        go g{randomgen       = randomgen'
            ,cavesteps       = cavesteps'
            ,cavelines       = cavelines'
            ,cavewidth       = cavewidth'
            ,cavecenter      = cavecenter'
            ,cavespeed       = cavespeed'
            ,cavespeedmin    = cavespeedmin'
-           })
-    ) $ trace (progname ++ " cave "++show cavenum) ginit
-  `seq` return ()
+           }
 
 -- Play the game repeatedly, saving new high scores when needed.
 repeatGame :: CaveNum -> Speed -> HighScores -> IO ()
