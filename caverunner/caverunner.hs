@@ -67,8 +67,8 @@ usage w h = banner ++ unlines [
   ,"Usage:"
   ,"$ ./caverunner.hs [ARGS]       # update the `caverunner` binary, then run it"
   ,"$ ./caverunner [CAVE [SPEED]]  # play, maybe changing cave (1) & max speed (15)"
-  ,"$ ./caverunner --print-cave [CAVE]  # print the full cave"
   ,"$ ./caverunner -h|--help       # show this help"
+  ,"$ ./caverunner --print-cave [CAVE [DEPTH]]  # show the full cave, or to DEPTH"
   ,""
   ,"Each CAVE has a high score (the max depth achieved) for each max speed."
   ,"80x25 terminals are best for competition play. Your current terminal is "++show w++"x"++show h++"."
@@ -240,7 +240,8 @@ main = do
           speederr a = err $
             "SPEED should be 1-60 (received "++a++"), see --help)"
   if "--print-cave" `elem` flags
-  then printCave cavenum
+  then let mlimit = if speed==defspeed then Nothing else Just (round speed)
+       in printCave cavenum mlimit
   else readHighScores >>= repeatGame cavenum speed
 
 exitWithUsage = do
@@ -255,11 +256,13 @@ exitWithUsage = do
   exitSuccess  
 
 -- Generate the cave just like the game would, printing each line to stdout.
-printCave cavenum = do
+-- Optionally, limit to just the first N lines.
+printCave cavenum mlimit = do
   putStrLn $ progname ++ " cave "++show cavenum
-  go $ newGameState gamewidth 25 cavenum 15 0
+  go mlimit $ newGameState gamewidth 25 cavenum 15 0
   where
-    go g@GameState{..} =
+    go (Just 0) _ = return ()
+    go mremaining g@GameState{..} =
       when (cavewidth > 0) $ do
         let
           (cavesteps',
@@ -270,7 +273,8 @@ printCave cavenum = do
            cavelines'@(l:_)) = stepCave g
           cavespeed'         = stepSpeed g
         putStrLn $ showCaveLineWithNum gamewidth l cavesteps'
-        go g{randomgen    = randomgen'
+        go (fmap (subtract 1) mremaining)
+           g{randomgen    = randomgen'
             ,cavesteps    = cavesteps'
             ,cavelines    = cavelines'
             ,cavewidth    = cavewidth'
