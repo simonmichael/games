@@ -188,14 +188,14 @@ data GameState = GameState {
   ,exit            :: Bool       -- completely exit the app ?
   }
 
-newGameState w h c rg hs maxspeed = GameState {
+newGameState w h cavenum maxspeed hs = GameState {
    gamew           = w
   ,gameh           = h
   ,gtick           = 0
   ,highscore       = hs
   ,score           = 0
-  ,cavenum         = c
-  ,randomgen       = rg
+  ,cavenum         = cavenum
+  ,randomgen       = mkStdGen cavenum
   ,cavesteps       = 0
   ,cavelines       = []
   ,cavewidth       = 40  -- for repeatable caves
@@ -234,8 +234,7 @@ main = do
           speederr a = err $
             "SPEED should be 1-60 (received "++a++"), see --help)"
 
-  highscores <- readHighScores
-  repeatGame highscores cavenum speed
+  readHighScores >>= repeatGame cavenum speed
 
 exitWithUsage = do
   clearScreen
@@ -249,28 +248,27 @@ exitWithUsage = do
   exitSuccess  
 
 -- Play the game repeatedly, saving new high scores when needed.
-repeatGame :: HighScores -> CaveNum -> Speed -> IO ()
-repeatGame highscores caveseed maxspeed = do
+repeatGame :: CaveNum -> Speed -> HighScores -> IO ()
+repeatGame cavenum maxspeed highscores = do
   playGameStart
   (_,screenh) <- displaySize  -- use full screen height for each game (apparently last line is unusable on windows ? surely it's fine)
   let
-    randomgen = mkStdGen caveseed
-    highscore = fromMaybe 0 $ M.lookup (caveseed, round maxspeed) highscores
-    game = newGame screenh caveseed randomgen highscore maxspeed
+    highscore = fromMaybe 0 $ M.lookup (cavenum, round maxspeed) highscores
+    game = newGame screenh cavenum maxspeed highscore
   GameState{score,exit} <- Terminal.Game.playGameS game
   let
     highscore'  = max score highscore
-    highscores' = M.insert (caveseed, round maxspeed) highscore' highscores
+    highscores' = M.insert (cavenum, round maxspeed) highscore' highscores
   when (highscore' > highscore) $ writeHighScores highscores'
-  repeatGame highscores' caveseed maxspeed & unless exit
+  repeatGame cavenum maxspeed highscores' & unless exit
 
 -- Initialise a new game (a cave run).
-newGame :: Height -> CaveNum -> StdGen -> Score -> Speed -> Game GameState
-newGame gameh cavenum rg hs maxspeed =
+newGame :: Height -> CaveNum -> Speed -> Score -> Game GameState
+newGame gameh cavenum maxspeed hs =
   Game { gScreenWidth   = gamewidth, -- width used (and required) for drawing (a constant 80 for repeatable caves)
          gScreenHeight  = gameh,     -- height used for drawing (the screen height)
          gFPS           = fps,       -- target frames/game ticks per second
-         gInitState     = newGameState gamewidth gameh cavenum rg hs maxspeed,
+         gInitState     = newGameState gamewidth gameh cavenum maxspeed hs,
          gLogicFunction = step,
          gDrawFunction  = draw,
          gQuitFunction  = quit
