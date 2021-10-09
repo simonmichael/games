@@ -734,14 +734,14 @@ mkTones t freqs = [(f,t) | f <- freqs]
 
 -- Sound effects. These mostly play sound(s) asynchronously, returning immediately.
 
-gameStartSound = do
+gameStartSound = void $ forkIO $ do
   -- repeatTones 2 $ mkTones 100 $ [100,200,400,200]
   soxPlay False [".1","sine","400-100"]
-  threadDelay 100000
+  threadDelay 120000
   soxPlay False [".1","sine","400-100"]
-  threadDelay 100000
+  threadDelay 120000
   soxPlay False [".1","sine","400-100"]
-  threadDelay 100000
+  threadDelay 120000
   soxPlay False [".5","sine","400-100"]
 
 depthCueSound depth = do
