@@ -114,6 +114,7 @@ cavemarginmin = 2      -- how close can cave walls get to the game edge ?
 cavewidthinit = 40     -- how wide should the cave mouth be ?
 cavewidthmin  = 0      -- how narrow can the cave get ?
 cavewidthdurations = [ -- how long should the various cave widths last ?
+-- (W,N): at width >= W, narrow (by 1) every N cave lines
    (20,3)
   ,(10,10)
   ,( 8,50)
@@ -124,7 +125,7 @@ cavewidthdurations = [ -- how long should the various cave widths last ?
   ,( 3,10)
   ,( 2,3)
   ]
--- (W,N): at width >= W, narrow (by 1) every N cave lines. Eg:
+-- Eg:
 --  (20, 2) "at 20+,   narrow (by 1) every 2 lines"
 --  (10,10) "at 10-19, narrow every 10 lines"
 --  ( 8,50) "at 8-9,   narrow every 50 lines"
@@ -281,7 +282,8 @@ printCave cavenum mlimit = do
             ,cavespeedmin = cavespeedmin'
             }
 
--- Play the game repeatedly, saving new high scores when needed.
+-- Play the game repeatedly, saving new high scores and/or
+-- advancing to next cave when appropriate.
 repeatGame :: CaveNum -> Speed -> HighScores -> IO ()
 repeatGame cavenum maxspeed highscores = do
   when soundEnabled $ gameStartSound
@@ -289,12 +291,13 @@ repeatGame cavenum maxspeed highscores = do
   let
     highscore = fromMaybe 0 $ M.lookup (cavenum, round maxspeed) highscores
     game = newGame screenh cavenum maxspeed highscore
-  GameState{score,exit} <- Terminal.Game.playGameS game
+  g@GameState{score,exit} <- Terminal.Game.playGameS game
   let
     highscore'  = max score highscore
     highscores' = M.insert (cavenum, round maxspeed) highscore' highscores
+    cavenum'    = if playerAtEnd g then cavenum+1 else cavenum
   when (highscore' > highscore) $ writeHighScores highscores'
-  repeatGame cavenum maxspeed highscores' & unless exit
+  repeatGame cavenum' maxspeed highscores' & unless exit
 
 -- Initialise a new game (a cave run).
 newGame :: Height -> CaveNum -> Speed -> Score -> Game GameState
@@ -333,11 +336,6 @@ saveFilePath = do
 
 -------------------------------------------------------------------------------
 
--- Should the current game be ended ?
-quit g@GameState{..} =
-  gameover && isExpired restarttimer && not pause  --  if the restart timer just ended and not paused
-  || exit  -- or if q was pressed
-
 -- Handle input events.
 step g@GameState{..} (KeyPress k)
   | k == 'q'              = g { exit = True }
@@ -357,19 +355,15 @@ step g@GameState{..} (KeyPress k)
 step g@GameState{..} Tick =
   let
     g' = g{gtick     = gtick+1}
-    -- has player crashed ?
-    gameover' =
-      case cavelines `atMay` int (playerHeight g) of
-        Nothing             -> False
-        Just (CaveLine l r) -> playerx <= l || playerx > r
-
+    gameover' = playerCrashed g
+    victory   = playerAtEnd g
   in  -- breaks my haskell-mode's indentation
     if
       | pause ->  -- paused
         g'
 
-      | not gameover && gameover' ->  -- newly crashed
-        unsafePlay crashSound $
+      | not gameover && gameover' ->  -- newly crashed / reached the end
+        unsafePlay (if victory then victorySound else crashSound) $
         g'{gameover     = True
           ,highscore    = max score highscore
           ,restarttimer = reset restarttimer
@@ -451,6 +445,8 @@ stepCave GameState{..} =
 
     -- choose cave's next x position, with constraints:
     -- keep the walls within bounds
+    -- keep it somewhat navigable
+    --  (user can move sideways at ~5/s, don't allow long traverses faster than that)
     (randomdx, randomgen') = getRandom (-maxdx,maxdx) randomgen
     cavecenter' =
       let
@@ -492,6 +488,14 @@ stepScore g@GameState{..} cavesteps'
   | otherwise  = score
   where
     insidecave = cavesteps' > playerHeight g
+
+-- Should the current game be ended ?
+quit g@GameState{..}
+  | exit = True     -- always end if q was pressed
+  | pause = False   -- otherwise don't end if paused
+  | gameover && isExpired restarttimer = True  --  end if the restart timer just ended
+  | otherwise = False
+
 -------------------------------------------------------------------------------
 
 -- Create a timer for the next cave step, given the desired steps/s.
@@ -516,6 +520,21 @@ playerHeight GameState{..} = gameh - playery
 -- Player's current depth within the cave.
 playerDepth :: GameState -> CaveRow
 playerDepth g@GameState{..} = max 0 (cavesteps - playerHeight g)
+
+-- The cave line currently at the player's position, if any.
+playerLine :: GameState -> Maybe CaveLine
+playerLine g@GameState{..} = cavelines `atMay` int (playerHeight g)
+
+-- Has player hit a wall ?
+playerCrashed g@GameState{..} =
+  case playerLine g of
+    Nothing             -> False
+    Just (CaveLine l r) -> playerx <= l || playerx > r
+
+-- Has player reached the cave bottom (a zero-width line) ?
+playerAtEnd g = case playerLine g of
+  Just (CaveLine l r) | r <= l -> True
+  _                            -> False
 
 -- Convert seconds to game ticks based on global frame rate.
 secsToTicks :: Float -> Integer
@@ -709,4 +728,13 @@ crashSound = do
   playTone (100,1000)
   playTone (200,1000)
   playTone (300,1000)
+
+victorySound = do
+  playTone (200,100)
+  playTone (300,100)
+  playTone (400,100)
+  threadDelay 160000
+  playTone (200,1500)
+  playTone (300,1500)
+  playTone (400,1500)
 
