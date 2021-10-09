@@ -52,15 +52,20 @@ but couldn't easily get user input.
 
 ## Roadmap/Wishlist
 
-- more sideways cave movement
-- alternate player control schemes
-  - accelerate sideways ?
-- something rewarding at the bottom
-- better use of colour ? light/dark schemes ? cf Terminal.app silver aerogel
+- more reward at the bottom
+  - victory bonus, 100 x speed
+  - longer pause, dialog, screen shot ?
+  - unlock next cave (at current speed ?) ?
+- show crash sites
+- save crash sites
+- better use of colour
+  - light/dark schemes ? cf Terminal.app silver aerogel
+  - cave-specific colours
 - sound effects
   - game start
   - depth cues
   - crash
+  - victory tune
   - thrusters
   - high score
   - quit
@@ -69,8 +74,9 @@ but couldn't easily get user input.
 - attract mode / show high scores
 - measure & show actual frame rate
 - 1.0 release
-- show crash sites
-- save crash sites
+- more sideways cave movement ?
+- alternate player control schemes
+  - accelerate sideways ?
 - braking thrusters, with limited fuel
   - activated by a modifier key when those are available
   - otherwise by toggling left/right ?
