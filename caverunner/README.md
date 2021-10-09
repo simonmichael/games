@@ -52,6 +52,11 @@ but couldn't easily get user input.
 
 ## Roadmap/Wishlist
 
+- more/better sound effects
+  - wind noise (in caves with atmospheres, rising with speed)
+  - thrusters
+  - high score
+  - quit
 - more reward at the bottom
   - victory bonus, 100 x speed
   - longer pause, dialog, screen shot ?
@@ -61,16 +66,6 @@ but couldn't easily get user input.
 - better use of colour
   - light/dark schemes ? cf Terminal.app silver aerogel
   - cave-specific colours
-- sound effects
-  - game start
-  - depth cues
-  - crash
-  - victory tune
-  - thrusters
-  - high score
-  - quit
-  - wind noise (in caves with atmospheres, rising with speed)
-  - "near miss"
 - attract mode / show high scores
 - measure & show actual frame rate
 - 1.0 release
