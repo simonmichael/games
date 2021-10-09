@@ -384,9 +384,8 @@ step g@GameState{..} Tick =
           speedpan'    = stepSpeedpan g' cavesteps' cavespeed' cavelines'
           score'       = stepScore    g' cavesteps'
         in
-          (if cavesteps `mod` 5 == 2
-           then unsafePlay (depthCueSound cavesteps')
-           else id) $
+          (if cavesteps `mod` 5 == 2 then unsafePlay $ depthCueSound cavesteps' else id) $
+          (if playerCloseShave g' then unsafePlay closeShaveSound else id) $
           g'{randomgen    = randomgen'
             ,score        = score'
             ,speedpan     = speedpan'
@@ -525,11 +524,21 @@ playerDepth g@GameState{..} = max 0 (cavesteps - playerHeight g)
 playerLine :: GameState -> Maybe CaveLine
 playerLine g@GameState{..} = cavelines `atMay` int (playerHeight g)
 
+-- playerLineAbove g@GameState{..} = cavelines `atMay` int (playerHeight g - 1)
+
+-- playerLineBelow g@GameState{..} = cavelines `atMay` int (playerHeight g + 1)
+
 -- Has player hit a wall ?
 playerCrashed g@GameState{..} =
   case playerLine g of
     Nothing             -> False
     Just (CaveLine l r) -> playerx <= l || playerx > r
+
+-- Is player flying next to a wall ?
+playerCloseShave g@GameState{..} =
+  case playerLine g of
+    Nothing             -> False
+    Just (CaveLine l r) -> l == playerx-1 || r == playerx
 
 -- Has player reached the cave bottom (a zero-width line) ?
 playerAtEnd g = case playerLine g of
@@ -670,23 +679,31 @@ type Tone = (Hz, Ms)
 type Hz = Float
 type Ms = Int
 
--- Play a tone if possible (if sox is installed in PATH), optionally
--- blocking until the sound finishes playing, otherwise spawning
+-- Arguments to follow sox's `synth`, such as ["200","sine","1000"] (200hz sine wave for 1000ms).
+type SynthArgs = [String]
+
+-- Play a synthesised sound with sox if possible (if it is installed in PATH),
+-- optionally blocking until the sound finishes playing, otherwise spawning
 -- a thread to play it.
 -- Limitations: there's a short delay before/after a sound, so sequences
 -- have audible gaps between the sounds.
-soxPlay :: Bool -> Tone -> IO ()
-soxPlay synchronous (hz,ms) = do
+soxPlay :: Bool -> SynthArgs -> IO ()
+soxPlay synchronous args = do
   msox <- findExecutable "sox" -- XXX not noticeably slow, but should cache
   case msox of
-    Nothing   -> return ()
+    Nothing  -> return ()
     Just sox ->
       (if synchronous then callCommand else void . spawnCommand) $
-      printf "%s -qnd synth %f sine %f" sox (fromIntegral ms / 1000 :: Float) hz
+      sox ++ " -qnd synth " ++ unwords args
+
+-- Like soxPlay, but plays a tone.
+soxPlayTone :: Bool -> Tone -> IO ()
+soxPlayTone synchronous (hz,ms) = 
+  soxPlay synchronous [show $ fromIntegral ms / 1000, "sine", show hz]
 
 -- Play a tone (blocking).
 playTone' :: Tone -> IO ()
-playTone' = soxPlay True
+playTone' = soxPlayTone True
 
 -- Play a sequence of tones (blocking).
 playTones' :: [Tone] -> IO ()
@@ -699,7 +716,7 @@ repeatTones' n tones = playTones' $ concat $ replicate n tones
 
 -- Play a tone (non-blocking).
 playTone :: Tone -> IO ()
-playTone = soxPlay False
+playTone = soxPlayTone False
 
 -- Play a sequence of tones (non-blocking).
 playTones :: [Tone] -> IO ()
@@ -715,19 +732,36 @@ mkTones :: Ms -> [Hz] -> [Tone]
 mkTones t freqs = [(f,t) | f <- freqs]
 
 
--- Sound effects. These normally play sound(s) asynchronously, and return immediately.
+-- Sound effects. These mostly play sound(s) asynchronously, returning immediately.
 
-gameStartSound =
-  repeatTones 2 $ mkTones 100 $ [100,200,400,200]
+gameStartSound = do
+  -- repeatTones 2 $ mkTones 100 $ [100,200,400,200]
+  soxPlay False [".1","sine","400-100"]
+  threadDelay 100000
+  soxPlay False [".1","sine","400-100"]
+  threadDelay 100000
+  soxPlay False [".1","sine","400-100"]
+  threadDelay 100000
+  soxPlay False [".5","sine","400-100"]
 
 depthCueSound depth = do
   playTone (100  + float depth, 150)
   playTone (1000 - float depth, 150)
 
+closeShaveSound = do
+  soxPlay False [l, t,"fade","p",l]
+  where
+    l = ".3"
+    t = "pinknoise"
+
 crashSound = do
-  playTone (100,1000)
-  playTone (200,1000)
-  playTone (300,1000)
+  -- playTone (100,1000)
+  -- playTone (200,1000)
+  -- playTone (300,1000)
+  soxPlay False [l, t, "fade", "l", "0", "-0", l]
+  where
+    l = "10"
+    t = "brownnoise"
 
 victorySound = do
   playTone (200,100)
@@ -737,4 +771,7 @@ victorySound = do
   playTone (200,1500)
   playTone (300,1500)
   playTone (400,1500)
+
+-- soxPlay False [".3","sine","200-100"]
+-- soxPlay False [".8","sine","300-1"]
 
