@@ -238,10 +238,12 @@ main = do
             "CAVE should be a natural number (received "++a++"), see --help)"
           speederr a = err $
             "SPEED should be 1-60 (received "++a++"), see --help)"
-  if "--print-cave" `elem` flags
-  then let mlimit = if speed==defspeed then Nothing else Just (round speed)
-       in printCave cavenum mlimit
-  else readHighScores >>= repeatGame cavenum speed
+  if 
+    --  | "--print-speed-sound-volume" `elem` flags -> printSpeedSoundVolumes
+    | "--print-cave" `elem` flags ->
+      let mlimit = if speed==defspeed then Nothing else Just (round speed)
+      in printCave cavenum mlimit
+    | otherwise -> readHighScores >>= repeatGame cavenum speed
 
 exitWithUsage = do
   clearScreen
@@ -363,7 +365,7 @@ step g@GameState{..} Tick =
         g'
 
       | not gameover && gameover' ->  -- newly crashed / reached the end
-        unsafePlay (if victory then victorySound else crashSound) $
+        unsafePlay (if victory then victorySound else crashSound cavespeed) $
         g'{gameover     = True
           ,highscore    = max score highscore
           ,restarttimer = reset restarttimer
@@ -384,8 +386,10 @@ step g@GameState{..} Tick =
           speedpan'    = stepSpeedpan g' cavesteps' cavespeed' cavelines'
           score'       = stepScore    g' cavesteps'
         in
-          (if cavesteps `mod` 5 == 2 then unsafePlay $ depthCueSound cavesteps' else id) $
-          (if playerCloseShave g' then unsafePlay closeShaveSound else id) $
+          -- (if cavesteps `mod` 5 == 4 -- && cavespeed' > 5 
+          --   then unsafePlay $ speedSound cavespeed' else id) $
+          (if playerCloseShave g'    then unsafePlay closeShaveSound else id) $
+          (if cavesteps `mod` 5 == 2 then unsafePlay $ depthSound cavesteps' else id) $
           g'{randomgen    = randomgen'
             ,score        = score'
             ,speedpan     = speedpan'
@@ -735,33 +739,58 @@ mkTones t freqs = [(f,t) | f <- freqs]
 -- Sound effects. These mostly play sound(s) asynchronously, returning immediately.
 
 gameStartSound = void $ forkIO $ do
+  let d = 0.1
   -- repeatTones 2 $ mkTones 100 $ [100,200,400,200]
-  soxPlay False [".1","sine","400-100"]
-  threadDelay 120000
-  soxPlay False [".1","sine","400-100"]
-  threadDelay 120000
-  soxPlay False [".1","sine","400-100"]
-  threadDelay 120000
+  -- soxPlay False [show d,"sine","400-100"]
+  -- threadDelay $ round $ d * 1000000
+  soxPlay False [show d,"sine","400-100"]
+  threadDelay $ round $ d * 1000000
+  soxPlay False [show d,"sine","400-100"]
+  threadDelay $ round $ d * 1000000
   soxPlay False [".5","sine","400-100"]
 
-depthCueSound depth = do
-  playTone (100  + float depth, 150)
-  playTone (1000 - float depth, 150)
+depthSound depth = do
+  soxPlay False [".15", "sine", show $ 100 + depth, "vol .1"]
+  soxPlay False [".15", "sine", show $ 1000 - depth, "vol .05"]
+  return ()
+
+-- trying to mimic a variable constant hiss with short sounds - too fragile
+-- speedSound speed = do
+--   let d = 1 / speed
+--   soxPlay False [
+--     show d, "pinknoise",
+--     "fade q", show $ d / 2, "0", show $ d / 2,
+--     "vol", show $ speedSoundVolume speed
+--     ]
+
+-- speedSoundVolume :: Speed -> Float
+-- speedSoundVolume speed = max 0 $ (speed - 10) / 200
+
+-- printSpeedSoundVolumes = do
+--   putStrLn "        volume"
+--   putStrLn "speed       123456789"
+--   putStr $ unlines $ reverse $ [printf "%5.f  %4.1f " s v ++ replicate (round $ v * 10) '*' | (s,v) <- vols]
+--   where vols = [(s, speedSoundVolume s) | s <- [0,5..60::Speed]]
 
 closeShaveSound = do
-  soxPlay False [l, t,"fade","p",l]
-  where
-    l = ".3"
-    t = "pinknoise"
+  soxPlay False [".2 brownnoise", "fade p .2 -0 0", "vol .5"]
 
-crashSound = do
-  -- playTone (100,1000)
-  -- playTone (200,1000)
-  -- playTone (300,1000)
-  soxPlay False [l, t, "fade", "l", "0", "-0", l]
+crashSound speed = do
+  -- soxPlay False [l, "pinknoise",  "fade", "l", "0", "-0", l, "vol", v, "vol .2"]
+  soxPlay False [d, "brownnoise", "fade", "l", "0", "-0", d, "vol 1"]
+  soxPlay False [d, "brownnoise", "fade", "l", "0", "-0", d, "vol", v]
   where
-    l = "10"
-    t = "brownnoise"
+    speed' = min 60 $ 30 + speed / 2
+    d = show $ speed' / 6
+    v = show $ crashSoundVolume speed'
+
+crashSoundVolume s = s / 30
+
+printCrashSoundVolumes = do
+  putStrLn "        volume"
+  putStrLn "speed       123456789"
+  putStr $ unlines $ reverse $ [printf "%5.f  %4.1f " s v ++ replicate (round $ v * 10) '*' | (s,v) <- vols]
+  where vols = [(s, crashSoundVolume s) | s <- [0,5..60::Speed]]
 
 victorySound = do
   playTone (200,100)
