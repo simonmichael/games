@@ -1,5 +1,5 @@
 #!/usr/bin/env stack 
-{- stack script --optimize --verbosity=warn --resolver=lts-18
+{- stack script --optimize --verbosity=warn --resolver=lts-18.10
   --ghc-options=-threaded
   --package ansi-terminal
   --package ansi-terminal-game
