@@ -133,7 +133,7 @@ cavewidthdurations = [ -- how long should the various cave widths last ?
 --  ( 8,50) "at 8-9,   narrow every 50 lines"
 
 cavespeedinit  = 1     -- initial cave vertical speed (player's speed within the cave, really)
-cavespeedaccel = 1.01  -- multiply speed by this much each game tick (gravity)
+cavespeedaccel = 1.008  -- multiply speed by this much each game tick (gravity)
 cavespeedbrake = 1     -- multiply speed by this much each player movement (autobraking)
 
 (playerymin, playerymax) = (0.4, 0.4)  -- player bounds relative to screen height, different bounds enables speed panning
@@ -391,11 +391,17 @@ step g@GameState{..} Tick =
            cavelines') = stepCave     g'
           speedpan'    = stepSpeedpan g' cavesteps' cavespeed' cavelines'
           score'       = stepScore    g' cavesteps'
+          depth        = playerDepth g'
+          walldist     = fromMaybe 9999 $ playerWallDistance g'
         in
           -- (if cavesteps `mod` 5 == 4 -- && cavespeed' > 5 
           --   then unsafePlay $ speedSound cavespeed' else id) $
-          (if playerCloseShave g'    then unsafePlay closeShaveSound else id) $
-          (if cavesteps `mod` 5 == 2 then unsafePlay $ depthSound cavesteps' else id) $
+          -- XXX trying very hard to start the beeps at cave mouth, no success
+          -- (if depth>0 && (depth-1) `mod` 5 == 1 
+          -- (if cavesteps'>playerHeight g' && cavesteps' `mod` 5 == 0
+          (if cavesteps `mod` 5 == 2
+            then unsafePlay $ depthSound cavesteps' else id) $
+          (if walldist <= 2 then unsafePlay $ closeShaveSound walldist else id) $
           g'{randomgen    = randomgen'
             ,score        = score'
             ,speedpan     = speedpan'
@@ -544,11 +550,12 @@ playerCrashed g@GameState{..} =
     Nothing             -> False
     Just (CaveLine l r) -> playerx <= l || playerx > r
 
--- Is player flying next to a wall ?
-playerCloseShave g@GameState{..} =
+-- How close is player flying to a wall ?
+playerWallDistance :: GameState -> Maybe Width
+playerWallDistance g@GameState{..} =
   case playerLine g of
-    Nothing             -> False
-    Just (CaveLine l r) -> l == playerx-1 || r == playerx
+    Nothing             -> Nothing
+    Just (CaveLine l r) -> Just $ min (max 0 $ playerx-l) (max 0 $ r+1-playerx)
 
 -- Has player reached the cave bottom (a zero-width line) ?
 playerAtEnd g = case playerLine g of
@@ -672,6 +679,7 @@ drawSpeed g@GameState{..} = stringPlane " speed " ||| stringPlane (printf "%3.f 
 
 drawStats g@GameState{..} =
       (stringPlane "    depth " ||| stringPlane (printf "%3d " (playerDepth g)))
+  -- === (stringPlane "depthmod5 " ||| stringPlane (printf "%3d " (playerDepth g `mod` 5)))
   === (stringPlane "    width " ||| stringPlane (printf "%3d " cavewidth))
   === (stringPlane " minspeed " ||| stringPlane (printf "%3.f " cavespeedmin))
   -- === (stringPlane " speedpan " ||| stringPlane (printf "%3d " speedpan))
@@ -745,20 +753,21 @@ mkTones t freqs = [(f,t) | f <- freqs]
 -- Sound effects. These mostly play sound(s) asynchronously, returning immediately.
 
 gameStartSound = void $ forkIO $ do
-  let d = 0.1
+  let d = 0.12
+      v = 0.7
   -- repeatTones 2 $ mkTones 100 $ [100,200,400,200]
   -- soxPlay False [show d,"sine","400-100"]
   -- threadDelay $ round $ d * 1000000
-  soxPlay False [show d,"sine","400-100"]
+  soxPlay False [show d,"sine","400-100","vol",show v]
   threadDelay $ round $ d * 1000000
-  soxPlay False [show d,"sine","400-100"]
+  soxPlay False [show d,"sine","400-100","vol",show v]
   threadDelay $ round $ d * 1000000
-  soxPlay False [".5","sine","400-100"]
+  soxPlay False [".5","sine","400-100","vol",show v]
 
 depthSound depth = do
-  soxPlay False [".15", "sine", show $ 100 + depth, "vol .1"]
-  soxPlay False [".15", "sine", show $ 1000 - depth, "vol .05"]
-  return ()
+  let v = 0.1
+  soxPlay False [".15", "sine", show $ 100 + depth, "vol", show v]
+  soxPlay False [".15", "sine", show $ 1000 - depth, "vol", show $ v/2]
 
 -- trying to mimic a variable constant hiss with short sounds - too fragile
 -- speedSound speed = do
@@ -778,8 +787,17 @@ depthSound depth = do
 --   putStr $ unlines $ reverse $ [printf "%5.f  %4.1f " s v ++ replicate (round $ v * 10) '*' | (s,v) <- vols]
 --   where vols = [(s, speedSoundVolume s) | s <- [0,5..60::Speed]]
 
-closeShaveSound = do
-  soxPlay False [".2 brownnoise", "fade p .2 -0 0", "vol .5"]
+closeShaveSound distance = do
+  let
+    d = 0.2 
+    v | distance==1 = 0.5
+      | distance==2 = 0.2
+      | otherwise   = 0
+  soxPlay False [
+    show d, "brownnoise", 
+    "fade p .2 -0 0", 
+    "vol", show v
+    ]
 
 crashSound speed = do
   -- soxPlay False [l, "pinknoise",  "fade", "l", "0", "-0", l, "vol", v, "vol .2"]
@@ -790,7 +808,7 @@ crashSound speed = do
     d = show $ speed' / 6
     v = show $ crashSoundVolume speed'
 
-crashSoundVolume s = s / 30
+crashSoundVolume s = s / 25
 
 printCrashSoundVolumes = do
   putStrLn "        volume"
