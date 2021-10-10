@@ -95,7 +95,7 @@ wallchar           = '#'
 spacechar          = ' '
 crashchar          = '*'
 fps                = 60  -- target frame rate; computer/terminal may not achieve it
-restartdelaysecs   = 5
+restartdelaysecs   = 10
 
 {- Three widths:
 
