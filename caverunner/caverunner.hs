@@ -694,7 +694,7 @@ soxPlay synchronous args = do
     Nothing  -> return ()
     Just sox ->
       (if synchronous then callCommand else void . spawnCommand) $
-      sox ++ " -qnd synth " ++ unwords args
+      sox ++ " -V0 -qnd synth " ++ unwords args
 
 -- Like soxPlay, but plays a tone.
 soxPlayTone :: Bool -> Tone -> IO ()
