@@ -28,6 +28,7 @@
 
 import Control.Applicative
 import Control.Concurrent
+import Control.Exception
 import Control.Monad
 import Data.Function (fix)
 import Data.List
@@ -57,7 +58,7 @@ banner = unlines [
   ,"/ /__/ /_/ /| |/ /  __/ /  / /_/ / / / / / / /  __/ /    "
   ,"\\___/\\__,_/ |___/\\___/_/   \\__,_/_/ /_/_/ /_/\\___/_/     "
   ]
-usage w h = banner ++ unlines [
+usage termsize msoxpath = banner ++ unlines [
     ------------------------------------------------------------------------------80
    ""
   ,"caverunner "++version++" - a small terminal game by Simon Michael."
@@ -65,25 +66,26 @@ usage w h = banner ++ unlines [
   ,"Fly fast, avoid the walls!"
   ,""
   ,"Usage:"
-  ,"$ ./caverunner.hs [ARGS]       # update the `caverunner` binary, then run it"
-  ,"$ ./caverunner [CAVE [SPEED]]  # play, maybe changing cave (1) & max speed (15)"
-  ,"$ ./caverunner -h|--help       # show this help"
-  ,"$ ./caverunner --print-cave [CAVE [DEPTH]]  # show the full cave, or to DEPTH"
+  ,"$ ./caverunner.hs [ARGS]                               # compile & run the game"
+  ,"$ ./caverunner [CAVE [SPEED]] [--stats] [--no-sound]   # run the game"
+  ,"$ ./caverunner --print-cave [CAVE [DEPTH]]             # print the cave"
+  ,"$ ./caverunner --help|-h"
   ,""
   ,"Each CAVE has a high score (the max depth achieved) for each max speed."
-  ,"80x25 terminals are best for competition play. Your current terminal is "++show w++"x"++show h++"."
+  ,"80x25 terminals are best for competition play. Your current terminal is "++termsize++"."
   ,""
   ,"SPEED limits your maximum dive speed, 1-60 fathoms per second (default 15)."
   ,"High speeds make survival difficult, but increase the glory!"
   ,""
   ]
-soundHelpDisabled = unlines [
-   "To enable sound effects, install sox in PATH:"
-  ,"apt install sox / brew install sox / choco install sox.portable / etc."
-  ]
-soundHelpEnabled soxpath = unlines [
-   "Sound effects are enabled, using " ++ soxpath ++ ". --no-sound to disable."
-  ]
+  ++ case msoxpath of
+    Nothing -> unlines [
+      "To enable sound effects, install sox in PATH:"
+      ,"apt install sox / brew install sox / choco install sox.portable / etc."
+      ]
+    Just soxpath -> unlines [
+      "Sound effects are enabled, using " ++ soxpath ++ ". --no-sound to disable."
+      ]
 
 -------------------------------------------------------------------------------
 
@@ -166,7 +168,8 @@ type CaveCol = Column
 data CaveLine = CaveLine GameCol GameCol deriving (Show)
 
 data GameState = GameState {
-   gamew           :: Width      -- width of the game  (but perhaps not the screen)
+   stats           :: Bool       -- whether to show statistics
+  ,gamew           :: Width      -- width of the game  (but perhaps not the screen)
   ,gameh           :: Height     -- height of the game (and usually the screen)
   ,gtick           :: Integer    -- current game tick
   ,highscore       :: Score      -- high score for the current cave and max speed
@@ -192,8 +195,9 @@ data GameState = GameState {
   }
   deriving (Show)
 
-newGameState w h cavenum maxspeed hs = GameState {
-   gamew           = w
+newGameState stats w h cavenum maxspeed hs = GameState {
+   stats           = stats
+  ,gamew           = w
   ,gameh           = h
   ,gtick           = 0
   ,highscore       = hs
@@ -227,6 +231,7 @@ main = do
     defcavenum = 1
     defspeed   = 15
     (flags, args') = partition ("-" `isPrefixOf`) args
+    flag = (`elem` flags)
     (cavenum, speed) =
       case args' of
         []    -> (defcavenum, defspeed)
@@ -243,24 +248,25 @@ main = do
     | "--print-cave" `elem` flags ->
       let mlimit = if speed==defspeed then Nothing else Just (round speed)
       in printCave cavenum mlimit
-    | otherwise -> readHighScores >>= repeatGame cavenum speed
+    | otherwise -> readHighScores >>= repeatGame (flag "--stats") cavenum speed
 
 exitWithUsage = do
   clearScreen
   setCursorPosition 0 0
-  (screenw,screenh) <- displaySize
-  putStr $ usage screenw screenh
+  termsize <- displaySizeStrSafe
   msox <- findExecutable "sox"
-  putStr $ case msox of
-             Nothing  -> soundHelpDisabled
-             Just sox -> soundHelpEnabled sox
+  putStr $ usage termsize msox
   exitSuccess
+
+displaySizeStrSafe = do
+  (w,h) <- displaySize `catch` \(_::SomeException) -> return (0,0)  -- XXX not working
+  return $ show w++"x"++show h
 
 -- Generate the cave just like the game would, printing each line to stdout.
 -- Optionally, limit to just the first N lines.
 printCave cavenum mlimit = do
   putStrLn $ progname ++ " cave "++show cavenum
-  go mlimit $ newGameState gamewidth 25 cavenum 15 0
+  go mlimit $ newGameState False gamewidth 25 cavenum 15 0
   where
     go (Just 0) _ = return ()
     go mremaining g@GameState{..} =
@@ -286,28 +292,28 @@ printCave cavenum mlimit = do
 
 -- Play the game repeatedly, saving new high scores and/or
 -- advancing to next cave when appropriate.
-repeatGame :: CaveNum -> Speed -> HighScores -> IO ()
-repeatGame cavenum maxspeed highscores = do
+repeatGame :: Bool -> CaveNum -> Speed -> HighScores -> IO ()
+repeatGame stats cavenum maxspeed highscores = do
   when soundEnabled $ gameStartSound
   (_,screenh) <- displaySize  -- use full screen height for each game (apparently last line is unusable on windows ? surely it's fine)
   let
     highscore = fromMaybe 0 $ M.lookup (cavenum, round maxspeed) highscores
-    game = newGame screenh cavenum maxspeed highscore
+    game = newGame stats screenh cavenum maxspeed highscore
   g@GameState{score,exit} <- Terminal.Game.playGameS game
   let
     highscore'  = max score highscore
     highscores' = M.insert (cavenum, round maxspeed) highscore' highscores
     cavenum'    = if playerAtEnd g then cavenum+1 else cavenum
   when (highscore' > highscore) $ writeHighScores highscores'
-  repeatGame cavenum' maxspeed highscores' & unless exit
+  repeatGame stats cavenum' maxspeed highscores' & unless exit
 
 -- Initialise a new game (a cave run).
-newGame :: Height -> CaveNum -> Speed -> Score -> Game GameState
-newGame gameh cavenum maxspeed hs =
+newGame :: Bool -> Height -> CaveNum -> Speed -> Score -> Game GameState
+newGame stats gameh cavenum maxspeed hs =
   Game { gScreenWidth   = gamewidth, -- width used (and required) for drawing (a constant 80 for repeatable caves)
          gScreenHeight  = gameh,     -- height used for drawing (the screen height)
          gFPS           = fps,       -- target frames/game ticks per second
-         gInitState     = newGameState gamewidth gameh cavenum maxspeed hs,
+         gInitState     = newGameState stats gamewidth gameh cavenum maxspeed hs,
          gLogicFunction = step,
          gDrawFunction  = draw,
          gQuitFunction  = quit
@@ -594,7 +600,7 @@ draw g@GameState{..} =
   & (1, highscorex) % drawHighScore g
   & (1, scorex)     % drawScore g
   & (1, speedx)     % drawSpeed g
-  -- & (3, gamew - 13) % drawStats g
+  & (if stats then (3, gamew - 13) % drawStats g else id)
   & (playery+speedpan, playerx) % drawPlayer g
   where
     titlew     = 12
