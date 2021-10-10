@@ -372,6 +372,7 @@ step g@GameState{..} Tick =
 
       | not gameover && gameover' ->  -- newly crashed / reached the end
         unsafePlay (if victory then victorySound else crashSound cavespeed) $
+        (if score > highscore then unsafePlay gameEndHighScoreSound else id) $
         g'{gameover     = True
           ,highscore    = max score highscore
           ,restarttimer = reset restarttimer
@@ -402,6 +403,7 @@ step g@GameState{..} Tick =
           (if cavesteps `mod` 5 == 2
             then unsafePlay $ depthSound cavesteps' else id) $
           (if walldist <= 2 then unsafePlay $ closeShaveSound walldist else id) $
+          (if score <= highscore && score' > highscore then unsafePlay highScoreSound else id) $
           g'{randomgen    = randomgen'
             ,score        = score'
             ,speedpan     = speedpan'
@@ -755,9 +757,6 @@ mkTones t freqs = [(f,t) | f <- freqs]
 gameStartSound = void $ forkIO $ do
   let d = 0.12
       v = 0.7
-  -- repeatTones 2 $ mkTones 100 $ [100,200,400,200]
-  -- soxPlay False [show d,"sine","400-100"]
-  -- threadDelay $ round $ d * 1000000
   soxPlay False [show d,"sine","400-100","vol",show v]
   threadDelay $ round $ d * 1000000
   soxPlay False [show d,"sine","400-100","vol",show v]
@@ -815,6 +814,12 @@ printCrashSoundVolumes = do
   putStrLn "speed       123456789"
   putStr $ unlines $ reverse $ [printf "%5.f  %4.1f " s v ++ replicate (round $ v * 10) '*' | (s,v) <- vols]
   where vols = [(s, crashSoundVolume s) | s <- [0,5..60::Speed]]
+
+highScoreSound = do
+  soxPlay False [".1 sine 800 sine 800 delay 0 +.2"]
+
+gameEndHighScoreSound = do
+  soxPlay False [".05 sine 400 sine 500 sine 600 sine 800 sine 800 delay "++delay++" +.1 +.1 +.1 +.2"] where delay = show $ restartdelaysecs / 2
 
 victorySound = do
   playTone (200,100)

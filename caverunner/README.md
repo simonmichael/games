@@ -53,7 +53,6 @@ but couldn't easily get user input.
 ## Roadmap/Wishlist
 
 - more/better sound effects
-  - high score
   - thrusters
   - quit?
   - handle spawn errors (once saw "caverunner: /bin/sh: spawnCommand: posix_spawnp: does not exist (No such file or directory)" at speed 60)
