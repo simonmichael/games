@@ -53,22 +53,23 @@ but couldn't easily get user input.
 ## Roadmap/Wishlist
 
 - more/better sound effects
-  - wind noise (in caves with atmospheres, rising with speed)
-  - thrusters
   - high score
-  - quit
+  - thrusters
+  - quit?
+  - handle spawn errors (once saw "caverunner: /bin/sh: spawnCommand: posix_spawnp: does not exist (No such file or directory)" at speed 60)
+- wait for a key at game end
+- remember last speed and cave
+- remember crash sites
 - more reward at the bottom
-  - victory bonus, 100 x speed
-  - longer pause, dialog, screen shot ?
   - unlock next cave (at current speed ?) ?
-- show crash sites
-- save crash sites
+  - a tune ?
 - better use of colour
+  - cave-specific colours ?
   - light/dark schemes ? cf Terminal.app silver aerogel
-  - cave-specific colours
-- attract mode / show high scores
+- attract mode / high score table
 - measure & show actual frame rate
 - 1.0 release
+
 - more sideways cave movement ?
 - alternate player control schemes
   - accelerate sideways ?
@@ -87,3 +88,5 @@ but couldn't easily get user input.
   - sound check mode (and video check if useful) to help with setup
   - try soxlib with graceful fallback
   - try sdl-mixer with graceful fallback
+  - wind noise, rising with speed (in caves with atmospheres)
+- victory bonus, 100 x speed (once braking is added, or for scores comparable across speeds)
