@@ -99,7 +99,7 @@ wallchar           = '#'
 spacechar          = ' '
 crashchar          = '*'
 fps                = 60  -- target frame rate; computer/terminal may not achieve it
-restartdelaysecs   = 10
+restartdelaysecs   = 3   -- minimum pause after game over
 
 {- Three widths:
 
@@ -184,8 +184,9 @@ data GameState = GameState {
   -- current app state
   ,scene           :: Scene      -- current app/game mode
   ,pause           :: Bool       -- keep things paused ?
-  ,exit            :: Bool       -- exit the app ?
-  ,restarttimer    :: Timed Bool -- delay after game over before restart
+  ,restarttimer    :: Timed Bool -- delay after game over before allowing a restart keypress
+  ,restart         :: Bool       -- time to restart after game over ?
+  ,exit            :: Bool       -- time to exit the app ?
   -- current game state
   ,gamew           :: Width      -- width of the game  (but perhaps not the screen)
   ,gameh           :: Height     -- height of the game (and usually the screen)
@@ -213,6 +214,7 @@ newGameState stats w h cavenum maxspeed hs = GameState {
    stats           = stats
   ,scene           = Playing
   ,pause           = False
+  ,restart         = False
   ,exit            = False
   ,restarttimer    = creaBoolTimer $ secsToTicks restartdelaysecs
   ,gamew           = w
@@ -438,23 +440,18 @@ step g@GameState{scene=Playing, ..} Tick =
             ,cavespeedmin = cavespeedmin'
             }
 
-step g@GameState{scene=Crashed, ..} Tick =
-  let g' = g{gtick=gtick+1} in
-  if
-    | pause -> g'
-    | otherwise -> g'{restarttimer = tick restarttimer}
+step g@GameState{..} (KeyPress 'q') = g { exit = True }
 
-step g@GameState{scene=Won, ..} Tick =
-  let g' = g{gtick=gtick+1} in
-  if
-    | pause -> g'
-    | otherwise -> g'{restarttimer = tick restarttimer}
+step g@GameState{..} Tick | gameOver g = g{restarttimer = tick restarttimer}
+
+step g@GameState{..} (KeyPress _) | gameOver g, isExpired restarttimer = g{restart=True}
+
+step g@GameState{..} (KeyPress _) | gameOver g = g
 
 step g@GameState{..} (KeyPress k)
-  | k == 'q'              = g { exit = True }
-  | k `elem` "p ", pause  = g { pause = False }
-  | k `elem` "p "         = g { pause = True }
-  | otherwise = g
+  | k `elem` "p "         = g{pause=True}
+  | k `elem` "p ", pause  = g{pause=False}
+  | otherwise             = g
 
 -- step GameState{..} Tick = error $ "No handler for " ++ show scene ++ " -> " ++ show Tick ++ " !"
 
@@ -463,9 +460,9 @@ step g@GameState{..} (KeyPress k)
 
 -- Should the current game be ended ?
 quit g@GameState{..}
-  | exit = True                                 -- yes if q was pressed
-  | pause = False                               -- no if paused
-  | gameOver g && isExpired restarttimer = True -- yes if enough time has passed since game over
+  | exit = True           -- yes if q was pressed
+  | pause = False         -- no if paused
+  | restart = True        -- yes if a key was pressed after game over
   | otherwise = False
 
 stepSpeed :: GameState -> (Speed, Speed)
@@ -650,14 +647,17 @@ draw g@GameState{..} =
   & (1, highscorex) % drawHighScore g
   & (1, scorex)     % drawScore g
   & (1, speedx)     % drawSpeed g
-  & (if stats then (3, gamew - 13) % drawStats g else id)
   & (playery+speedpan, playerx) % drawPlayer g
+  & (if gameOver g then (gameovery, gameoverx) % drawGameOver g gameoverw gameoverh else id)
+  & (if stats then (3, gamew - 13) % drawStats g else id)
   where
     titlew     = 12
     cavenamew  = fromIntegral $ 10 + length (show cavenum) + length (show cavespeedmax)
     highscorew = 17
     scorew     = 11
     speedw     = 10
+    gameoverw  = 30
+    gameoverh  = 7
 
     titlex     = 1
     helpx      = 1
@@ -665,9 +665,25 @@ draw g@GameState{..} =
     scorex     = highscorex + highscorew + half (speedx - (highscorex + highscorew)) - half scorew
     highscorex = half gamew - half highscorew
     cavenamex  = min (highscorex - cavenamew) (half (highscorex - (titlex+titlew)) + titlex + titlew - half cavenamew)
+    gameoverx  = half gamew - half gameoverw
+    gameovery  = max (playery+2) $ half gameh - half gameoverh
 
 -------------------------------------------------------------------------------
 -- drawing helpers
+
+drawGameOver GameState{..} w h =
+  box '-' w h
+  & (2,2) % box ' ' (w-2) (h-2)
+  & (txty,txtx) % stringPlane txt
+  & (if isExpired restarttimer then (txty+2,txtx-7) % stringPlane "press a key to continue" else id)
+  where
+    innerw = w - 2
+    innerh = h - 2
+    txt = "GAME OVER" 
+    txtw = fromIntegral $ length txt
+    txth = 2
+    txtx = 2 + half innerw - half txtw
+    txty = 3
 
 drawCave GameState{..} =
   vcat $
