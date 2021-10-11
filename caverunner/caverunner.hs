@@ -1,4 +1,4 @@
-#!/usr/bin/env stack 
+#!/usr/bin/env stack
 {- stack script --optimize --verbosity=warn --resolver=lts-18.10
   --ghc-options=-threaded
   --package ansi-terminal
@@ -21,7 +21,9 @@
 -- You can also use cabal and/or your system package manager to
 -- install the above haskell packages and a suitable GHC version (eg
 -- 8.10), then compile the script.
+
 -------------------------------------------------------------------------------
+-- language & imports
 
 {-# OPTIONS_GHC -Wno-missing-signatures -Wno-unused-imports #-}
 {-# LANGUAGE MultiWayIf, NamedFieldPuns, RecordWildCards, ScopedTypeVariables #-}
@@ -49,6 +51,7 @@ import Text.Pretty.Simple (pPrint)
 import Text.Printf
 
 -------------------------------------------------------------------------------
+-- help
 
 progname  = "caverunner"
 version   = "1.0alpha"
@@ -88,6 +91,7 @@ usage termsize msoxpath = banner ++ unlines [
       ]
 
 -------------------------------------------------------------------------------
+-- tweakable parameters
 
 savefilename       = progname ++ ".save"
 (leftkey,rightkey) = (',','.')
@@ -149,6 +153,7 @@ cavespeedbrake = 1     -- multiply speed by this much each player movement (auto
 -- (playerymin, playerymax) = (0.4, 0.4)
 
 -------------------------------------------------------------------------------
+-- types
 
 type CaveNum    = Int    -- the number of a cave (and its random seed)
 type MaxSpeed   = Int    -- a maximum dive/scroll speed in a cave
@@ -167,14 +172,27 @@ type CaveCol = Column
 -- One line within a cave, with its left/right wall positions.
 data CaveLine = CaveLine GameCol GameCol deriving (Show)
 
+data Scene =
+    Playing
+  | Crashed
+  | Won
+  deriving (Show,Eq)
+
 data GameState = GameState {
+  -- options
    stats           :: Bool       -- whether to show statistics
+  -- current app state
+  ,scene           :: Scene      -- current app/game mode
+  ,pause           :: Bool       -- keep things paused ?
+  ,exit            :: Bool       -- exit the app ?
+  ,restarttimer    :: Timed Bool -- delay after game over before restart
+  -- current game state
   ,gamew           :: Width      -- width of the game  (but perhaps not the screen)
   ,gameh           :: Height     -- height of the game (and usually the screen)
   ,gtick           :: Integer    -- current game tick
+  ,cavenum         :: CaveNum
   ,highscore       :: Score      -- high score for the current cave and max speed
   ,score           :: Score      -- current score in this game
-  ,cavenum         :: CaveNum
   ,randomgen       :: StdGen
   ,cavesteps       :: Integer    -- how many cave lines have been generated since game start
   ,cavelines       :: [CaveLine] -- recent cave lines, for display; newest/bottom-most first
@@ -188,21 +206,21 @@ data GameState = GameState {
   ,playery         :: GameRow    -- player's y coordinate in game area
   ,playerx         :: GameCol    -- player's x coordinate in game area
   ,playerchar      :: Char
-  ,gameover        :: Bool       -- player has crashed ?
-  ,restarttimer    :: Timed Bool -- delay before restart after player crash
-  ,pause           :: Bool       -- keep the game paused ?
-  ,exit            :: Bool       -- completely exit the app ?
   }
   deriving (Show)
 
 newGameState stats w h cavenum maxspeed hs = GameState {
    stats           = stats
+  ,scene           = Playing
+  ,pause           = False
+  ,exit            = False
+  ,restarttimer    = creaBoolTimer $ secsToTicks restartdelaysecs
   ,gamew           = w
   ,gameh           = h
   ,gtick           = 0
+  ,cavenum         = cavenum
   ,highscore       = hs
   ,score           = 0
-  ,cavenum         = cavenum
   ,randomgen       = mkStdGen cavenum
   ,cavesteps       = 0
   ,cavelines       = []
@@ -216,13 +234,10 @@ newGameState stats w h cavenum maxspeed hs = GameState {
   ,playery         = playerYMin h
   ,playerx         = half w
   ,playerchar      = 'V'
-  ,gameover        = False
-  ,restarttimer    = creaBoolTimer $ secsToTicks restartdelaysecs
-  ,pause           = False
-  ,exit            = False
   }
 
 -------------------------------------------------------------------------------
+-- app logic
 
 main = do
   args <- getArgs
@@ -243,7 +258,7 @@ main = do
             "CAVE should be a natural number (received "++a++"), see --help)"
           speederr a = err $
             "SPEED should be 1-60 (received "++a++"), see --help)"
-  if 
+  if
     --  | "--print-speed-sound-volume" `elem` flags -> printSpeedSoundVolumes
     | "--print-cave" `elem` flags ->
       let mlimit = if speed==defspeed then Nothing else Just (round speed)
@@ -320,6 +335,7 @@ newGame stats gameh cavenum maxspeed hs =
        }
 
 -------------------------------------------------------------------------------
+-- persistent state (save file)
 
 -- Read high scores for each cave seed and speed from the save file.
 readHighScores :: IO HighScores
@@ -343,43 +359,39 @@ saveFilePath = do
   return $ datadir </> savefilename
 
 -------------------------------------------------------------------------------
+-- event handlers & game logic for each scene
 
--- Handle input events.
-step g@GameState{..} (KeyPress k)
+step g@GameState{scene=Playing, ..} (KeyPress k)
   | k == 'q'              = g { exit = True }
   | k `elem` "p ", pause  = g { pause = False }
   | k `elem` "p "         = g { pause = True }
-  | k == leftkey,  not (gameover || pause) =
-      g { playerx = max 1 (playerx - 1)
+  | not pause, k == leftkey =
+      g { playerx   = max 1 (playerx - 1)
         , cavespeed = max cavespeedmin (cavespeed * cavespeedbrake)
         }
-  | k == rightkey, not (gameover || pause) =
-      g { playerx = min gamew (playerx + 1)
+  | not pause, k == rightkey =
+      g { playerx   = min gamew (playerx + 1)
         , cavespeed = max cavespeedmin (cavespeed * cavespeedbrake)
         }
   | otherwise = g
 
--- Handle a tick event (game heartbeat). Most updates to game state happen here.
-step g@GameState{..} Tick =
+step g@GameState{scene=Playing, ..} Tick =
   let
     g' = g{gtick     = gtick+1}
-    gameover' = playerCrashed g
-    victory   = playerAtEnd g
-  in  -- breaks my haskell-mode's indentation
+    gameover = playerCrashed g
+    victory  = playerAtEnd g
+  in
     if
       | pause ->  -- paused
         g'
 
-      | not gameover && gameover' ->  -- newly crashed / reached the end
+      | gameover ->  -- crashed / reached the end
         unsafePlay (if victory then victorySound else crashSound cavespeed) $
         (if score > highscore then unsafePlay gameEndHighScoreSound else id) $
-        g'{gameover     = True
+        g'{scene        = if victory then Won else Crashed
           ,highscore    = max score highscore
           ,restarttimer = reset restarttimer
           }
-
-      | gameover ->  -- previously crashed, awaiting restart
-        g'{restarttimer = tick restarttimer}
 
       | isExpired cavetimer ->  -- time to step the cave
         let
@@ -392,7 +404,7 @@ step g@GameState{..} Tick =
            cavelines') = stepCave     g'
           speedpan'    = stepSpeedpan g' cavesteps' cavespeed' cavelines'
           score'       = stepScore    g' cavesteps'
-          depth        = playerDepth g'
+          -- depth        = playerDepth g'
           walldist     = fromMaybe 9999 $ playerWallDistance g'
         in
           -- (if cavesteps `mod` 5 == 4 -- && cavespeed' > 5 
@@ -414,7 +426,6 @@ step g@GameState{..} Tick =
             ,cavespeed    = cavespeed'
             ,cavespeedmin = cavespeedmin'
             ,cavetimer    = newCaveTimer cavespeed'
-            ,gameover     = gameover'
             }
 
       | otherwise ->  -- time is passing
@@ -426,6 +437,36 @@ step g@GameState{..} Tick =
             ,cavespeed    = cavespeed'
             ,cavespeedmin = cavespeedmin'
             }
+
+step g@GameState{scene=Crashed, ..} Tick =
+  let g' = g{gtick=gtick+1} in
+  if
+    | pause -> g'
+    | otherwise -> g'{restarttimer = tick restarttimer}
+
+step g@GameState{scene=Won, ..} Tick =
+  let g' = g{gtick=gtick+1} in
+  if
+    | pause -> g'
+    | otherwise -> g'{restarttimer = tick restarttimer}
+
+step g@GameState{..} (KeyPress k)
+  | k == 'q'              = g { exit = True }
+  | k `elem` "p ", pause  = g { pause = False }
+  | k `elem` "p "         = g { pause = True }
+  | otherwise = g
+
+-- step GameState{..} Tick = error $ "No handler for " ++ show scene ++ " -> " ++ show Tick ++ " !"
+
+-------------------------------------------------------------------------------
+-- logic helpers
+
+-- Should the current game be ended ?
+quit g@GameState{..}
+  | exit = True                                 -- yes if q was pressed
+  | pause = False                               -- no if paused
+  | gameOver g && isExpired restarttimer = True -- yes if enough time has passed since game over
+  | otherwise = False
 
 stepSpeed :: GameState -> (Speed, Speed)
 stepSpeed GameState{..} = (speed', minspeed')
@@ -506,14 +547,10 @@ stepScore g@GameState{..} cavesteps'
   where
     insidecave = cavesteps' > playerHeight g
 
--- Should the current game be ended ?
-quit g@GameState{..}
-  | exit = True     -- always end if q was pressed
-  | pause = False   -- otherwise don't end if paused
-  | gameover && isExpired restarttimer = True  --  end if the restart timer just ended
-  | otherwise = False
-
 -------------------------------------------------------------------------------
+-- state helpers
+
+gameOver GameState{scene} = scene `elem` [Crashed,Won]
 
 -- Create a timer for the next cave step, given the desired steps/s.
 -- The steps/s should be no greater than ticks/s (the frame rate),
@@ -564,6 +601,9 @@ playerAtEnd g = case playerLine g of
   Just (CaveLine l r) | r <= l -> True
   _                            -> False
 
+-------------------------------------------------------------------------------
+-- utilities
+
 -- Convert seconds to game ticks based on global frame rate.
 secsToTicks :: Float -> Integer
 secsToTicks = round . (* float fps)
@@ -598,6 +638,7 @@ soundEnabled :: Bool
 soundEnabled = not $ "--no-sound" `elem` unsafePerformIO getArgs
 
 -------------------------------------------------------------------------------
+-- drawing for each scene
 
 draw g@GameState{..} =
     blankPlane gamew gameh
@@ -625,6 +666,9 @@ draw g@GameState{..} =
     highscorex = half gamew - half highscorew
     cavenamex  = min (highscorex - cavenamew) (half (highscorex - (titlex+titlew)) + titlex + titlew - half cavenamew)
 
+-------------------------------------------------------------------------------
+-- drawing helpers
+
 drawCave GameState{..} =
   vcat $
   map (drawCaveLine gamew) $
@@ -649,7 +693,7 @@ showCaveLineWithNum gamew l n =
 drawPlayer GameState{..} =
   cell char #bold #color hue Vivid
   where
-    (char, hue) | gameover  = (crashchar,Red)
+    (char, hue) | scene==Crashed = (crashchar,Red)
                 | otherwise = (playerchar,Blue)
 
 drawTitle GameState{..} =
@@ -667,10 +711,10 @@ drawHelp GameState{..} =
   === (cell 'p'      #bold  ||| if pause then stringPlane " pause " #bold else stringPlane " pause ")
   === (cell 'q'      #bold  ||| if exit then stringPlane " quit " #bold else stringPlane " quit ")
 
-drawHighScore GameState{..} =
+drawHighScore g@GameState{..} =
   stringPlane " high score " ||| (stringPlane (printf "%04d " highscore) & maybebold)
   where
-    maybebold = if gameover && highscore==score then (#bold) else id
+    maybebold = if gameOver g && highscore==score then (#bold) else id
 
 drawScore GameState{..} =
   stringPlane " score " ||| (stringPlane (printf "%04d " score) & maybebold)
@@ -688,6 +732,7 @@ drawStats g@GameState{..} =
   -- === (stringPlane "    speed " ||| stringPlane (printf "%3.f " cavespeed))
 
 -------------------------------------------------------------------------------
+-- sound
 
 -- Play sounds with sox (http://sox.sourceforge.net), it it's in PATH.
 -- Limitations:
@@ -718,7 +763,7 @@ soxPlay synchronous args = do
 
 -- Like soxPlay, but plays a tone.
 soxPlayTone :: Bool -> Tone -> IO ()
-soxPlayTone synchronous (hz,ms) = 
+soxPlayTone synchronous (hz,ms) =
   soxPlay synchronous [show $ fromIntegral ms / 1000, "sine", show hz]
 
 -- Play a tone (blocking).
@@ -727,7 +772,7 @@ playTone' = soxPlayTone True
 
 -- Play a sequence of tones (blocking).
 playTones' :: [Tone] -> IO ()
-playTones' tones = mapM_ playTone' tones
+playTones' = mapM_ playTone'
 
 -- Play a sequence of tones N times (blocking).
 repeatTones' :: Int -> [Tone] -> IO ()
@@ -788,13 +833,13 @@ depthSound depth = do
 
 closeShaveSound distance = do
   let
-    d = 0.2 
+    d = 0.2
     v | distance==1 = 0.5
       | distance==2 = 0.2
       | otherwise   = 0
   soxPlay False [
-    show d, "brownnoise", 
-    "fade p .2 -0 0", 
+    show d, "brownnoise",
+    "fade p .2 -0 0",
     "vol", show v
     ]
 
