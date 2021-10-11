@@ -52,11 +52,6 @@ but couldn't easily get user input.
 
 ## Roadmap/Wishlist
 
-- more/better sound effects
-  - thrusters
-  - quit?
-  - handle spawn errors (once saw "caverunner: /bin/sh: spawnCommand: posix_spawnp: does not exist (No such file or directory)" at speed 60)
-- wait for a key at game end
 - remember last speed and cave
 - remember crash sites
 - more reward at the bottom
@@ -81,6 +76,9 @@ but couldn't easily get user input.
 - high score sharing / server
 - document vs code+hls setup, dev workflows
 - better sound support
+  - reproduce/handle spawn error (once saw "caverunner: /bin/sh: spawnCommand: posix_spawnp: does not exist (No such file or directory)" at speed 60)
+  - thrusters
+  - quit?
   - continuous/dynamic length sounds (keep playing thruster sound until player stops)
   - legato melodies (play notes with no gaps)
   - clearer short sounds (don't always clip/muffle sounds < 100ms)
