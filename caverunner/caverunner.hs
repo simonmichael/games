@@ -134,6 +134,9 @@ cavewidthdurations = [ -- how long should the various cave widths last ?
 --  (10,10) "at 10-19, narrow every 10 lines"
 --  ( 8,50) "at 8-9,   narrow every 50 lines"
 
+defcavenum  = 1
+defmaxspeed = 15
+
 cavespeedinit  = 1     -- initial cave vertical speed (player's speed within the cave, really)
 cavespeedaccel = 1.008  -- multiply speed by this much each game tick (gravity)
 cavespeedbrake = 1     -- multiply speed by this much each player movement (autobraking)
@@ -157,7 +160,6 @@ type CaveNum    = Int    -- the number of a cave (and its random seed)
 type MaxSpeed   = Int    -- a maximum dive/scroll speed in a cave
 type Speed      = Float
 type Score      = Int
-type HighScores = M.Map (CaveNum, MaxSpeed) Score
 
 -- Coordinates within the on-screen game drawing area, from 1,1 at top left.
 type GameRow = Row
@@ -228,7 +230,7 @@ newGameState stats w h cavenum maxspeed hs = GameState {
   ,cavecenter      = half w
   ,cavespeed       = cavespeedinit
   ,cavespeedmin    = cavespeedinit * 2
-  ,cavespeedmax    = maxspeed
+  ,cavespeedmax    = fromIntegral maxspeed
   ,cavetimer       = newCaveTimer cavespeedinit
   ,speedpan        = 0
   ,playery         = playerYMin h
@@ -236,22 +238,35 @@ newGameState stats w h cavenum maxspeed hs = GameState {
   ,playerchar      = 'V'
   }
 
+data SaveState = SaveState {
+   highscores   :: M.Map (CaveNum, MaxSpeed) Score  -- high scores achieved for each cave and max speed 
+  ,highcave     :: CaveNum     -- the highest cave number reached/unlocked
+  ,currentcave  :: CaveNum     -- the cave most recently played
+  ,currentspeed :: MaxSpeed    -- the max speed most recently played
+} deriving (Read, Show, Eq)
+
+newSaveState = SaveState{
+   highscores   = M.empty
+  ,highcave     = defcavenum
+  ,currentcave  = defcavenum
+  ,currentspeed = defmaxspeed
+}
+
 -------------------------------------------------------------------------------
 -- app logic
 
 main = do
   args <- getArgs
   when ("-h" `elem` args || "--help" `elem` args) exitWithUsage
+  ss@SaveState{..} <- readSaveState
   let
-    defcavenum = 1
-    defspeed   = 15
     (flags, args') = partition ("-" `isPrefixOf`) args
     flag = (`elem` flags)
-    (cavenum, speed) =
+    (cavenum, speed, hasspeedarg) =
       case args' of
-        []    -> (defcavenum, defspeed)
-        [c]   -> (readDef (caveerr c) c, defspeed)
-        [c,s] -> (readDef (caveerr c) c, readDef (speederr s) s)
+        []    -> (currentcave, currentspeed, False)
+        [c]   -> (readDef (caveerr c) c, currentspeed, False)
+        [c,s] -> (readDef (caveerr c) c, readDef (speederr s) s, True)
         _     -> err "too many arguments, please see --help"
         where
           caveerr a = err $
@@ -260,22 +275,16 @@ main = do
             "SPEED should be 1-60 (received "++a++"), see --help)"
   if
     --  | "--print-speed-sound-volume" `elem` flags -> printSpeedSoundVolumes
+
     | "--print-cave" `elem` flags ->
-      let mlimit = if speed==defspeed then Nothing else Just (round speed)
-      in printCave cavenum mlimit
-    | otherwise -> readHighScores >>= repeatGame (flag "--stats") cavenum speed
+      let mdepth = if hasspeedarg then Just speed else Nothing
+      in printCave cavenum mdepth
 
-exitWithUsage = do
-  clearScreen
-  setCursorPosition 0 0
-  termsize <- displaySizeStrSafe
-  msox <- findExecutable "sox"
-  putStr $ usage termsize msox
-  exitSuccess
-
-displaySizeStrSafe = do
-  (w,h) <- displaySize `catch` \(_::SomeException) -> return (0,0)  -- XXX not working
-  return $ show w++"x"++show h
+    | otherwise -> do
+      -- remember new cave and speed if different
+      let ss' = ss{ currentcave=cavenum, currentspeed=speed }
+      when (ss' /= ss) $ writeSaveState ss'
+      playGames (flag "--stats") cavenum (fromIntegral speed) ss
 
 -- Generate the cave just like the game would, printing each line to stdout.
 -- Optionally, limit to just the first N lines.
@@ -305,24 +314,31 @@ printCave cavenum mlimit = do
             ,cavespeedmin = cavespeedmin'
             }
 
--- Play the game repeatedly, saving new high scores and/or
--- advancing to next cave when appropriate.
-repeatGame :: Bool -> CaveNum -> Speed -> HighScores -> IO ()
-repeatGame stats cavenum maxspeed highscores = do
+-- Play the game repeatedly, optionally showing stats, at the given cave and speed,
+-- updating the save file and/or advancing to next cave when appropriate.
+playGames :: Bool -> CaveNum -> MaxSpeed -> SaveState -> IO ()
+playGames stats cavenum maxspeed ss@SaveState{..} = do
   (_,screenh) <- displaySize  -- use full screen height for each game (apparently last line is unusable on windows ? surely it's fine)
   let
-    highscore = fromMaybe 0 $ M.lookup (cavenum, round maxspeed) highscores
+    highscore = fromMaybe 0 $ M.lookup (cavenum, maxspeed) highscores
     game = newGame stats screenh cavenum maxspeed highscore
   g@GameState{score,exit} <- Terminal.Game.playGameS game
   let
     highscore'  = max score highscore
-    highscores' = M.insert (cavenum, round maxspeed) highscore' highscores
+    highscores' = M.insert (cavenum, maxspeed) highscore' highscores
     cavenum'    = if playerAtEnd g then cavenum+1 else cavenum
-  when (highscore' > highscore) $ writeHighScores highscores'
-  repeatGame stats cavenum' maxspeed highscores' & unless exit
+    highcave'   = max cavenum' highcave
+    ss'         = SaveState{
+       highscores   = highscores'
+      ,highcave     = highcave'
+      ,currentcave  = cavenum'
+      ,currentspeed = maxspeed
+      }
+  when (ss' /= ss) $ writeSaveState ss'
+  playGames stats cavenum' maxspeed ss' & unless exit
 
 -- Initialise a new game (a cave run).
-newGame :: Bool -> Height -> CaveNum -> Speed -> Score -> Game GameState
+newGame :: Bool -> Height -> CaveNum -> MaxSpeed -> Score -> Game GameState
 newGame stats gameh cavenum maxspeed hs =
   Game { gScreenWidth   = gamewidth, -- width used (and required) for drawing (a constant 80 for repeatable caves)
          gScreenHeight  = gameh,     -- height used for drawing (the screen height)
@@ -332,30 +348,6 @@ newGame stats gameh cavenum maxspeed hs =
          gDrawFunction  = draw,
          gQuitFunction  = quit
        }
-
--------------------------------------------------------------------------------
--- persistent state (save file)
-
--- Read high scores for each cave seed and speed from the save file.
-readHighScores :: IO HighScores
-readHighScores = do
-  savefile <- saveFilePath
-  exists <- doesFileExist savefile
-  if exists
-  then
-    readDef (err $ "could not read high scores from\n"++savefile++"\nperhaps the format has changed, please move it out of the way")
-    <$> readFile savefile
-  else pure M.empty
-
-writeHighScores highscores = do
-  savefile <- saveFilePath
-  createDirectoryIfMissing True $ takeDirectory savefile
-  writeFile savefile $ show highscores
-
-saveFilePath :: IO FilePath
-saveFilePath = do
-  datadir <- getXdgDirectory XdgData progname
-  return $ datadir </> savefilename
 
 -------------------------------------------------------------------------------
 -- event handlers & game logic for each scene
@@ -545,7 +537,7 @@ stepScore g@GameState{..} cavesteps'
     insidecave = cavesteps' > playerHeight g
 
 -------------------------------------------------------------------------------
--- state helpers
+-- game state helpers
 
 gameOver GameState{scene} = scene `elem` [Crashed,Won]
 
@@ -600,7 +592,46 @@ playerAtEnd g = case playerLine g of
   _                            -> False
 
 -------------------------------------------------------------------------------
+-- save state helpers
+
+saveFilePath :: IO FilePath
+saveFilePath = do
+  datadir <- getXdgDirectory XdgData progname
+  return $ datadir </> savefilename
+
+readSaveState :: IO SaveState
+readSaveState = do
+  savefile <- saveFilePath
+  exists <- doesFileExist savefile
+  if exists
+  then
+    readDef (err $ init $ unlines [
+       "could not read the save file:"
+      ,savefile
+      ,"Perhaps the format has changed ? Please move it out of the way and run again."
+      ])
+    <$> readFile savefile
+  else pure newSaveState
+
+writeSaveState ss = do
+  savefile <- saveFilePath
+  createDirectoryIfMissing True $ takeDirectory savefile
+  writeFile savefile $ show ss
+
+-------------------------------------------------------------------------------
 -- utilities
+
+exitWithUsage = do
+  clearScreen
+  setCursorPosition 0 0
+  termsize <- displaySizeStrSafe
+  msox <- findExecutable "sox"
+  putStr $ usage termsize msox
+  exitSuccess
+
+displaySizeStrSafe = do
+  (w,h) <- displaySize `catch` \(_::SomeException) -> return (0,0)  -- XXX not working
+  return $ show w++"x"++show h
 
 -- Convert seconds to game ticks based on global frame rate.
 secsToTicks :: Float -> Integer
