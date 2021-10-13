@@ -242,13 +242,13 @@ newGameState stats w h cavenum maxspeed hs = GameState {
 data SavedState = SavedState {
    currentcave  :: CaveNum     -- the cave most recently played
   ,currentspeed :: MaxSpeed    -- the max speed most recently played
-  ,highcave     :: CaveNum     -- the highest cave number reached/unlocked
+  ,highcave     :: CaveNum     -- the highest cave number completed (0 for none)
 } deriving (Read, Show, Eq)
 
 newSavedState = SavedState{
    currentcave  = defcavenum
   ,currentspeed = defmaxspeed
-  ,highcave     = defcavenum
+  ,highcave     = 0
 }
 
 statefilename   = "state"
@@ -339,8 +339,9 @@ playGames stats cavenum maxspeed sstate@SavedState{..} sscores = do
   saveState sstate  -- if cave or speed are new (and game started), remember them
 
   let
-    cavenum'    = if playerAtEnd g then cavenum+1 else cavenum
-    highcave'   = max cavenum' highcave
+    (cavenum', highcave')
+      | playerAtEnd g = (cavenum+1, max highcave cavenum)
+      | otherwise     = (cavenum, highcave)
     highscore'  = max score highscore
     sscores'    = M.insert (cavenum, maxspeed) highscore' sscores
     sstate' = SavedState{
