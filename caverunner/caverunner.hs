@@ -309,7 +309,6 @@ printCave cavenum mlimit = do
 -- advancing to next cave when appropriate.
 repeatGame :: Bool -> CaveNum -> Speed -> HighScores -> IO ()
 repeatGame stats cavenum maxspeed highscores = do
-  when soundEnabled gameStartSound
   (_,screenh) <- displaySize  -- use full screen height for each game (apparently last line is unusable on windows ? surely it's fine)
   let
     highscore = fromMaybe 0 $ M.lookup (cavenum, round maxspeed) highscores
@@ -377,13 +376,16 @@ step g@GameState{scene=Playing, ..} (KeyPress k)
 
 step g@GameState{scene=Playing, ..} Tick =
   let
-    g' = g{gtick     = gtick+1}
-    gameover = playerCrashed g
-    victory  = playerAtEnd g
+    g' = g{gtick = gtick+1}
+    gamestart = gtick==0
+    gameover  = playerCrashed g
+    victory   = playerAtEnd g
   in
     if
       | pause ->  -- paused
         g'
+
+      | gamestart -> unsafePlay gameStartSound g'
 
       | gameover ->  -- crashed / reached the end
         unsafePlay (if victory then victorySound else crashSound cavespeed) $
