@@ -423,7 +423,7 @@ step g@GameState{scene=Playing, ..} Tick =
           (if cavesteps `mod` 5 == 2
             then unsafePlay $ depthSound cavesteps' else id) $
           (if walldist <= 2 then unsafePlay $ closeShaveSound walldist else id) $
-          (if score <= highscore && score' > highscore then unsafePlay highScoreSound else id) $
+          -- (if score <= highscore && score' > highscore then unsafePlay highScoreSound else id) $
           g'{randomgen    = randomgen'
             ,score        = score'
             ,speedpan     = speedpan'
