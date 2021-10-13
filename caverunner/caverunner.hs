@@ -6,7 +6,6 @@
   --package containers
   --package directory
   --package filepath
-  --package linebreak
   --package pretty-simple
   --package process
   --package safe
