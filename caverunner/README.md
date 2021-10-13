@@ -52,18 +52,23 @@ but couldn't easily get user input.
 
 ## Roadmap/Wishlist
 
-- remember last speed and cave
+- winning unlocks next caves
+- catch sound errors
+  - "/bin/sh: spawnCommand: fork: resource exhausted (Resource temporarily unavailable)" repeated games at speed 60
+  - "/bin/sh: spawnCommand: posix_spawnp: does not exist (No such file or directory)" at speed 60
+- more efficient sox commands
+- high score message
+- win message
+- win sound effect/tune
+- winning grants speed-based score bonus
 - remember crash sites
-- more reward at the bottom
-  - unlock next cave (at current speed ?) ?
-  - a tune ?
-- better use of colour
-  - cave-specific colours ?
-  - light/dark schemes ? cf Terminal.app silver aerogel
+- cave-specific colours ?
+- light/dark schemes ? cf Terminal.app silver aerogel
 - attract mode / high score table
-- measure & show actual frame rate
+- better run/install docs
 - 1.0 release
 
+- show actual frame rate
 - more sideways cave movement ?
 - alternate player control schemes
   - accelerate sideways ?
@@ -75,15 +80,12 @@ but couldn't easily get user input.
 - more varied caves and flight mechanics
 - high score sharing / server
 - document vs code+hls setup, dev workflows
-- better sound support
-  - reproduce/handle spawn error (once saw "caverunner: /bin/sh: spawnCommand: posix_spawnp: does not exist (No such file or directory)" at speed 60)
-  - thrusters
-  - quit?
-  - continuous/dynamic length sounds (keep playing thruster sound until player stops)
-  - legato melodies (play notes with no gaps)
-  - clearer short sounds (don't always clip/muffle sounds < 100ms)
+- better sound
+  - thruster sound
+  - quit sound
+  - soxlib / sdl-mixer with graceful fallback ?
   - sound check mode (and video check if useful) to help with setup
-  - try soxlib with graceful fallback
-  - try sdl-mixer with graceful fallback
+  - clearer short sounds (don't always clip/muffle sounds < 100ms)
+  - continuous/dynamic length sounds (keep playing thruster sound until player stops)
   - wind noise, rising with speed (in caves with atmospheres)
 - victory bonus, 100 x speed (once braking is added, or for scores comparable across speeds)
