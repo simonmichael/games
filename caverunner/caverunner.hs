@@ -1,5 +1,5 @@
 #!/usr/bin/env stack
-{- stack script --optimize --verbosity=warn --resolver=lts-18.10
+{- stack script --optimize --verbosity=warn --resolver=nightly-2021-10-12
   --ghc-options=-threaded
   --package ansi-terminal
   --package ansi-terminal-game
@@ -10,8 +10,6 @@
   --package pretty-simple
   --package process
   --package safe
-  --package timers-tick
-  --package unidecode
 -}
 -- stack (https://www.fpcomplete.com/haskell/get-started) is the easy
 -- way to run this script reliably. On first run the script may seem
@@ -158,7 +156,7 @@ cavespeedbrake = 1     -- multiply speed by this much each player movement (auto
 type CaveNum    = Int    -- the number of a cave (and its random seed)
 type MaxSpeed   = Int    -- a maximum dive/scroll speed in a cave
 type Speed      = Float
-type Score      = Integer
+type Score      = Int
 type HighScores = M.Map (CaveNum, MaxSpeed) Score
 
 -- Coordinates within the on-screen game drawing area, from 1,1 at top left.
@@ -195,7 +193,7 @@ data GameState = GameState {
   ,highscore       :: Score      -- high score for the current cave and max speed
   ,score           :: Score      -- current score in this game
   ,randomgen       :: StdGen
-  ,cavesteps       :: Integer    -- how many cave lines have been generated since game start
+  ,cavesteps       :: Int        -- how many cave lines have been generated since game start (should be Integer but I can't be bothered)
   ,cavelines       :: [CaveLine] -- recent cave lines, for display; newest/bottom-most first
   ,cavewidth       :: Width      -- current cave width (inner space between the walls)
   ,cavecenter      :: GameCol    -- current x coordinate in game area of the cave's horizontal midpoint
@@ -515,7 +513,7 @@ stepCave GameState{..} =
 
     -- extend the cave, discarding old lines,
     -- except for an extra screenful that might be needed for speedpan
-    cavelines' = take (int gameh * 2) $ CaveLine l r : cavelines
+    cavelines' = take (gameh * 2) $ CaveLine l r : cavelines
       where
         (l,r) = caveWalls cavecenter' cavewidth'
 
@@ -530,11 +528,11 @@ stepSpeedpan GameState{..} cavesteps' cavespeed' cavelines'
   | otherwise                       = speedpan
   where
     readytopan =
-      length cavelines' >= int gameh
+      length cavelines' >= gameh
       && cavesteps' `mod` 5 == 0
     idealpan =
       round $
-      float (playerYMax gameh - playerYMin gameh)
+      fromIntegral (playerYMax gameh - playerYMin gameh)
       * (cavespeed'-cavespeedinit) / (cavespeedmax-cavespeedinit)
 
 -- increase score for every step deeper into the cave
@@ -561,8 +559,8 @@ caveWalls center width = (center - half width, center + half width)
 
 -- Player's minimum and maximum y coordinate in the game drawing area.
 playerYMin, playerYMax :: Height -> GameRow
-playerYMin gameh = round $ playerymin * float gameh
-playerYMax gameh = round $ playerymax * float gameh
+playerYMin gameh = round $ playerymin * fromIntegral gameh
+playerYMax gameh = round $ playerymax * fromIntegral gameh
 
 -- Player's current height above bottom of the game drawing area.
 playerHeight :: GameState -> GameRow
@@ -574,11 +572,11 @@ playerDepth g@GameState{..} = max 0 (cavesteps - playerHeight g)
 
 -- The cave line currently at the player's position, if any.
 playerLine :: GameState -> Maybe CaveLine
-playerLine g@GameState{..} = cavelines `atMay` int (playerHeight g)
+playerLine g@GameState{..} = cavelines `atMay` playerHeight g
 
--- playerLineAbove g@GameState{..} = cavelines `atMay` int (playerHeight g - 1)
+-- playerLineAbove g@GameState{..} = cavelines `atMay` (playerHeight g - 1)
 
--- playerLineBelow g@GameState{..} = cavelines `atMay` int (playerHeight g + 1)
+-- playerLineBelow g@GameState{..} = cavelines `atMay` (playerHeight g + 1)
 
 -- Has player hit a wall ?
 playerCrashed g@GameState{..} =
@@ -603,16 +601,16 @@ playerAtEnd g = case playerLine g of
 
 -- Convert seconds to game ticks based on global frame rate.
 secsToTicks :: Float -> Integer
-secsToTicks = round . (* float fps)
+secsToTicks = round . (* fromIntegral fps)
 
 half :: Integral a => a -> a
 half = (`div` 2)
 
-float :: Integer -> Float
-float = fromInteger
+-- float :: Int -> Float
+-- float = fromIntegral
 
-int :: Integer -> Int
-int = fromIntegral
+-- int :: Integer -> Int
+-- int = fromIntegral
 
 err = errorWithoutStackTrace
 
@@ -637,7 +635,7 @@ unsafePlay a = if soundEnabled then seq (unsafePerformIO a) else id
 
 draw g@GameState{..} =
     blankPlane gamew gameh
-  & (max 1 (gameh - toInteger (length cavelines) + 1), 1) % drawCave g
+  & (max 1 (gameh - length cavelines + 1), 1) % drawCave g
   -- & (1, 1)          % blankPlane gamew 1
   & (1, titlex)     % drawTitle g
   & (1, cavenamex)  % drawCaveName g
@@ -670,14 +668,14 @@ draw g@GameState{..} =
 -- drawing helpers
 
 drawGameOver GameState{..} w h =
-  box '-' w h
-  & (2,2) % box ' ' (w-2) (h-2)
+  box w h '-'
+  & (2,2) % box (w-2) (h-2) ' '
   & (txty,txtx) % stringPlane txt
   & (if isExpired restarttimer then (txty+2,txtx-7) % stringPlane "press a key to continue" else id)
   where
     innerw = w - 2
     innerh = h - 2
-    txt = "GAME OVER" 
+    txt = "GAME OVER"
     txtw = fromIntegral $ length txt
     txth = 2
     txtx = 2 + half innerw - half txtw
@@ -687,16 +685,16 @@ drawCave GameState{..} =
   vcat $
   map (drawCaveLine gamew) $
   reverse $
-  take (int gameh) $
-  drop (int speedpan) cavelines
+  take gameh $
+  drop speedpan cavelines
 
 drawCaveLine gamew line = stringPlane $ showCaveLine gamew line
 
 showCaveLine gamew (CaveLine left right) =
   concat [
-    replicate (int left) wallchar
-   ,replicate (int $ right - left) spacechar
-   ,replicate (int $ gamew - right ) wallchar
+    replicate left wallchar
+   ,replicate (right - left) spacechar
+   ,replicate (gamew - right ) wallchar
    ]
 
 showCaveLineWithNum gamew l n =
