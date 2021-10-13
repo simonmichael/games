@@ -72,11 +72,10 @@ usage termsize msoxpath = banner ++ unlines [
   ,"$ ./caverunner --print-cave [CAVE [DEPTH]]             # print the cave"
   ,"$ ./caverunner --help|-h"
   ,""
-  ,"Each CAVE has a high score (the max depth achieved) for each max speed."
-  ,"80x25 terminals are best for competition play. Your current terminal is "++termsize++"."
+  ,"CAVE and SPEED select a different cave number and max speed (1-60, default 15)."
+  ,"These are persistent. Higher speeds increase the glory!"
   ,""
-  ,"SPEED limits your maximum dive speed, 1-60 fathoms per second (default 15)."
-  ,"High speeds make survival difficult, but increase the glory!"
+  ,"80x25 terminals are best for competition play. Your current terminal is "++termsize++"."
   ,""
   ]
   ++ case msoxpath of
@@ -91,7 +90,6 @@ usage termsize msoxpath = banner ++ unlines [
 -------------------------------------------------------------------------------
 -- tweakable parameters
 
-savefilename       = progname ++ ".save"
 (leftkey,rightkey) = (',','.')
 wallchar           = '#'
 spacechar          = ' '
@@ -238,19 +236,35 @@ newGameState stats w h cavenum maxspeed hs = GameState {
   ,playerchar      = 'V'
   }
 
-data SaveState = SaveState {
-   highscores   :: M.Map (CaveNum, MaxSpeed) Score  -- high scores achieved for each cave and max speed 
-  ,highcave     :: CaveNum     -- the highest cave number reached/unlocked
-  ,currentcave  :: CaveNum     -- the cave most recently played
+-- save files, separated for robustness
+
+-- miscellaneous saved state
+
+data SavedState = SavedState {
+   currentcave  :: CaveNum     -- the cave most recently played
   ,currentspeed :: MaxSpeed    -- the max speed most recently played
+  ,highcave     :: CaveNum     -- the highest cave number reached/unlocked
 } deriving (Read, Show, Eq)
 
-newSaveState = SaveState{
-   highscores   = M.empty
-  ,highcave     = defcavenum
-  ,currentcave  = defcavenum
+newSavedState = SavedState{
+   currentcave  = defcavenum
   ,currentspeed = defmaxspeed
+  ,highcave     = defcavenum
 }
+
+statefilename   = "state"
+loadState       = load statefilename
+saveState       = maybeSave statefilename
+
+-- high scores
+
+type SavedScores = M.Map (CaveNum, MaxSpeed) Score  -- high scores achieved for each cave and max speed 
+
+newSavedScores = M.empty
+
+scoresfilename  = "scores"
+loadScores      = load scoresfilename
+saveScores      = maybeSave scoresfilename
 
 -------------------------------------------------------------------------------
 -- app logic
@@ -258,7 +272,8 @@ newSaveState = SaveState{
 main = do
   args <- getArgs
   when ("-h" `elem` args || "--help" `elem` args) exitWithUsage
-  ss@SaveState{..} <- readSaveState
+  sstate@SavedState{..} <- fromMaybe newSavedState <$> loadState
+  sscores               <- fromMaybe newSavedScores <$> loadScores
   let
     (flags, args') = partition ("-" `isPrefixOf`) args
     flag = (`elem` flags)
@@ -281,10 +296,8 @@ main = do
       in printCave cavenum mdepth
 
     | otherwise -> do
-      -- remember new cave and speed if different
-      let ss' = ss{ currentcave=cavenum, currentspeed=speed }
-      when (ss' /= ss) $ writeSaveState ss'
-      playGames (flag "--stats") cavenum (fromIntegral speed) ss
+      let sstate' = sstate{ currentcave=cavenum, currentspeed=speed }
+      playGames (flag "--stats") cavenum (fromIntegral speed) sstate' sscores
 
 -- Generate the cave just like the game would, printing each line to stdout.
 -- Optionally, limit to just the first N lines.
@@ -316,26 +329,28 @@ printCave cavenum mlimit = do
 
 -- Play the game repeatedly, optionally showing stats, at the given cave and speed,
 -- updating the save file and/or advancing to next cave when appropriate.
-playGames :: Bool -> CaveNum -> MaxSpeed -> SaveState -> IO ()
-playGames stats cavenum maxspeed ss@SaveState{..} = do
+playGames :: Bool -> CaveNum -> MaxSpeed -> SavedState -> SavedScores -> IO ()
+playGames stats cavenum maxspeed sstate@SavedState{..} sscores = do
   (_,screenh) <- displaySize  -- use full screen height for each game (apparently last line is unusable on windows ? surely it's fine)
   let
-    highscore = fromMaybe 0 $ M.lookup (cavenum, maxspeed) highscores
+    highscore = fromMaybe 0 $ M.lookup (cavenum, maxspeed) sscores
     game = newGame stats screenh cavenum maxspeed highscore
-  g@GameState{score,exit} <- Terminal.Game.playGameS game
+
+  g@GameState{score,exit} <- Terminal.Game.playGameS game  -- run one game, will fail if terminal is too small
+  saveState sstate  -- if cave or speed are new (and game started), remember them
+
   let
-    highscore'  = max score highscore
-    highscores' = M.insert (cavenum, maxspeed) highscore' highscores
     cavenum'    = if playerAtEnd g then cavenum+1 else cavenum
     highcave'   = max cavenum' highcave
-    ss'         = SaveState{
-       highscores   = highscores'
-      ,highcave     = highcave'
-      ,currentcave  = cavenum'
+    highscore'  = max score highscore
+    sscores'    = M.insert (cavenum, maxspeed) highscore' sscores
+    sstate' = SavedState{
+       currentcave  = cavenum'
       ,currentspeed = maxspeed
+      ,highcave     = highcave'
       }
-  when (ss' /= ss) $ writeSaveState ss'
-  playGames stats cavenum' maxspeed ss' & unless exit
+  saveScores sscores'  -- if there's a new high score, save it
+  playGames stats cavenum' maxspeed sstate' sscores' & unless exit
 
 -- Initialise a new game (a cave run).
 newGame :: Bool -> Height -> CaveNum -> MaxSpeed -> Score -> Game GameState
@@ -592,31 +607,45 @@ playerAtEnd g = case playerLine g of
   _                            -> False
 
 -------------------------------------------------------------------------------
--- save state helpers
+-- save file helpers
 
-saveFilePath :: IO FilePath
-saveFilePath = do
-  datadir <- getXdgDirectory XdgData progname
-  return $ datadir </> savefilename
+getSaveDir :: IO FilePath
+getSaveDir = getXdgDirectory XdgData progname
 
-readSaveState :: IO SaveState
-readSaveState = do
-  savefile <- saveFilePath
-  exists <- doesFileExist savefile
-  if exists
-  then
-    readDef (err $ init $ unlines [
-       "could not read the save file:"
-      ,savefile
+-- Try to read a value from the named save file, using read,
+-- returning Nothing if the file does not exist,
+-- or exit with an error message if read fails.
+load :: Read a => FilePath -> IO (Maybe a)
+load filename = do
+  d <- getSaveDir
+  let f = d </> filename
+  exists <- doesFileExist f
+  if not exists
+  then pure Nothing
+  else
+    Just . readDef (err $ init $ unlines [
+      "could not read " ++ f
       ,"Perhaps the format has changed ? Please move it out of the way and run again."
       ])
-    <$> readFile savefile
-  else pure newSaveState
+    <$> readFile f    
 
-writeSaveState ss = do
-  savefile <- saveFilePath
-  createDirectoryIfMissing True $ takeDirectory savefile
-  writeFile savefile $ show ss
+-- Write a value to the named save file, using show,
+-- creating our save directory if it does not exist.
+save :: Show a => FilePath -> a -> IO ()
+save filename val = do
+  d <- getSaveDir
+  createDirectoryIfMissing True d
+  let f = d </> filename
+  writeFile f $ show val
+
+-- Like save, but don't write if the save file exists and already contains the same value.
+-- Returns true if it wrote.
+maybeSave :: (Eq a, Read a, Show a) => FilePath -> a -> IO Bool
+maybeSave filename val = do
+  mold <- load filename
+  case mold of
+    Just old | old == val -> return False
+    _                     -> save filename val >> return True
 
 -------------------------------------------------------------------------------
 -- utilities
