@@ -62,19 +62,21 @@ usage termsize msoxpath = banner ++ unlines [
     ------------------------------------------------------------------------------80
    ""
   ,"caverunner "++version++" - a small terminal game by Simon Michael."
-  ,"Thrillseeking drone pilots dive the solar system's caves, competing for glory."
-  ,"Fly fast, avoid the walls!"
+  ,""
+  ,"Thrillseeking drone pilots dive the solar system's caves, competing for glory!"
+  ,"Each cave and speed has a high score. Reaching the bottom unlocks more caves."
+  ,"How fast, how deep, how far can you go ?"
   ,""
   ,"Usage:"
-  ,"$ ./caverunner.hs [ARGS]                               # compile & run the game"
-  ,"$ ./caverunner [CAVE [SPEED]] [--stats] [--no-sound]   # run the game"
-  ,"$ ./caverunner --print-cave [CAVE [DEPTH]]             # print the cave"
-  ,"$ ./caverunner --help|-h"
+  ,"caverunner.hs                            # install deps, compile, run the game"
+  ,"caverunner [CAVE [SPEED]]                # run the game"
+  ,"caverunner --print-cave [CAVE [DEPTH]]   # print the cave to stdout"
+  ,"caverunner --help|-h                     # show this help"
   ,""
-  ,"CAVE and SPEED select a different cave number and max speed (1-60, default 15)."
-  ,"These are persistent. Higher speeds increase the glory!"
+  ,"CAVE and SPEED select a different cave (1..<highest cave finished + "++show cavelookahead++">)"
+  ,"and maximum dive speed (1..60)."
   ,""
-  ,"80x25 terminals are best for competition play. Your current terminal is "++termsize++"."
+  ,"Your current terminal is "++termsize++". 80x25 terminals are best for competition play."
   ,""
   ]
   ++ case msoxpath of
@@ -133,6 +135,7 @@ cavewidthdurations = [ -- how long should the various cave widths last ?
 
 defcavenum  = 1
 defmaxspeed = 15
+cavelookahead = 3
 
 cavespeedinit  = 1     -- initial cave vertical speed (player's speed within the cave, really)
 cavespeedaccel = 1.008  -- multiply speed by this much each game tick (gravity)
@@ -279,14 +282,23 @@ main = do
     (cavenum, speed, hasspeedarg) =
       case args' of
         []    -> (currentcave, currentspeed, False)
-        [c]   -> (readDef (caveerr c) c, currentspeed, False)
-        [c,s] -> (readDef (caveerr c) c, readDef (speederr s) s, True)
+        [c]   -> (checkcave $ readDef (caveerr c) c, currentspeed, False)
+        [c,s] -> (checkcave $ readDef (caveerr c) c, readDef (speederr s) s, True)
         _     -> err "too many arguments, please see --help"
         where
           caveerr a = err $
             "CAVE should be a natural number (received "++a++"), see --help)"
           speederr a = err $
             "SPEED should be 1-60 (received "++a++"), see --help)"
+          checkcave c
+            | c <= highcave + cavelookahead = c
+            | otherwise = err $
+              "You can't reach cave "++show c++" yet.\n" ++
+              "Having completed " ++ cavecompleted ++ ", you can access up to cave " ++ maxcave ++ "."
+                where
+                  cavecompleted = if highcave==0 then "no caves" else "cave "++show highcave
+                  maxcave = show $ highcave + cavelookahead
+
   if
     --  | "--print-speed-sound-volume" `elem` flags -> printSpeedSoundVolumes
 
