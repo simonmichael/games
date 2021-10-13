@@ -243,7 +243,7 @@ newGameState stats w h cavenum maxspeed hs = GameState {
 
 main = do
   args <- getArgs
-  when ("-h" `elem` args || "--help" `elem` args) $ exitWithUsage
+  when ("-h" `elem` args || "--help" `elem` args) exitWithUsage
   let
     defcavenum = 1
     defspeed   = 15
@@ -311,7 +311,7 @@ printCave cavenum mlimit = do
 -- advancing to next cave when appropriate.
 repeatGame :: Bool -> CaveNum -> Speed -> HighScores -> IO ()
 repeatGame stats cavenum maxspeed highscores = do
-  when soundEnabled $ gameStartSound
+  when soundEnabled gameStartSound
   (_,screenh) <- displaySize  -- use full screen height for each game (apparently last line is unusable on windows ? surely it's fine)
   let
     highscore = fromMaybe 0 $ M.lookup (cavenum, round maxspeed) highscores
@@ -453,7 +453,7 @@ step g@GameState{..} (KeyPress k)
   | k `elem` "p ", pause  = g{pause=False}
   | otherwise             = g
 
--- step GameState{..} Tick = error $ "No handler for " ++ show scene ++ " -> " ++ show Tick ++ " !"
+step GameState{..} Tick = error $ "No handler for " ++ show scene ++ " -> " ++ show Tick ++ " !"
 
 -------------------------------------------------------------------------------
 -- logic helpers
@@ -489,7 +489,7 @@ stepCave GameState{..} =
       | cannarrow = max cavewidthmin (cavewidth - 1)
       | otherwise = cavewidth
       where
-        cannarrow = (cavesteps' `mod` interval) == 0
+        cannarrow = cavesteps' `mod` interval == 0
           where
             interval = maybe 1 snd $ find ((<= cavewidth) . fst) cavewidthdurations
 
@@ -621,18 +621,16 @@ err = errorWithoutStackTrace
 -- unsafeio :: IO a -> b -> b
 -- unsafeio = seq . unsafePerformIO
 
+-- Check whether sounds should be played - true unless the program was
+-- run with the --no-sound flag. Uses unsafePerformIO. Won't change in a GHCI session.
+soundEnabled :: Bool
+soundEnabled = "--no-sound" `notElem` unsafePerformIO getArgs
+
 -- Execute an IO action, typically one that plays a sound asynchronously,
 -- before evaluating the second argument, unless sound is disabled.
 -- Uses unsafePerformIO.
 unsafePlay :: IO a -> b -> b
 unsafePlay a = if soundEnabled then seq (unsafePerformIO a) else id
-
--- Check whether sounds should be played - true unless the program was
--- run with the --no-sound flag. Uses unsafePerformIO. Won't change in a GHCI session.
--- {-# OPTIONS_GHC -fno-cse #-}
--- {-# NOINLINE soundEnabled #-}
-soundEnabled :: Bool
-soundEnabled = not $ "--no-sound" `elem` unsafePerformIO getArgs
 
 -------------------------------------------------------------------------------
 -- drawing for each scene
@@ -713,11 +711,11 @@ drawPlayer GameState{..} =
                 | otherwise = (playerchar,Blue)
 
 drawTitle GameState{..} =
-  hcat $
-  map bold $
-  map (\(a,b) -> a b) $
-  zip (drop (int cavesteps `div` 3 `mod` 4) $ cycle [color Red Vivid, color Green Vivid, color Blue Vivid, color Yellow Vivid]) $
-  map cell (progname++"! ")
+  hcat $ zipWith (\a b -> a b) colors (map (bold.cell) $ progname++"! ")
+  where
+    colors =
+      drop (cavesteps `div` 3 `mod` 4) $
+      cycle [color Red Vivid, color Green Vivid, color Blue Vivid, color Yellow Vivid]
 
 drawCaveName GameState{..} = stringPlane $ " cave "++show cavenum++" @ "++show (round cavespeedmax) ++ " "
 
