@@ -300,9 +300,9 @@ main = do
 
 -- Generate the cave just like the game would, printing each line to stdout.
 -- Optionally, limit to just the first N lines.
-printCave cavenum mlimit = do
+printCave cavenum mdepth = do
   putStrLn $ progname ++ " cave "++show cavenum
-  go mlimit $ newGameState False gamewidth 25 cavenum 15 0
+  go mdepth $ newGameState False gamewidth 25 cavenum 15 0
   where
     go (Just 0) _ = return ()
     go mremaining g@GameState{..} =
