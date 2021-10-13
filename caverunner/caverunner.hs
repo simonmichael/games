@@ -576,9 +576,9 @@ playerDepth g@GameState{..} = max 0 (cavesteps - playerHeight g)
 playerLine :: GameState -> Maybe CaveLine
 playerLine g@GameState{..} = cavelines `atMay` playerHeight g
 
--- playerLineAbove g@GameState{..} = cavelines `atMay` (playerHeight g - 1)
+playerLineAbove g@GameState{..} = cavelines `atMay` (playerHeight g - 1)
 
--- playerLineBelow g@GameState{..} = cavelines `atMay` (playerHeight g + 1)
+playerLineBelow g@GameState{..} = cavelines `atMay` (playerHeight g + 1)
 
 -- Has player hit a wall ?
 playerCrashed g@GameState{..} =
@@ -587,9 +587,10 @@ playerCrashed g@GameState{..} =
     Just (CaveLine l r) -> playerx <= l || playerx > r
 
 -- How close is player flying to a wall ?
+-- Actually, checks the line below (ahead) of the player, to sync better with sound effects.
 playerWallDistance :: GameState -> Maybe Width
 playerWallDistance g@GameState{..} =
-  case playerLine g of
+  case playerLineBelow g of
     Nothing             -> Nothing
     Just (CaveLine l r) -> Just $ min (max 0 $ playerx-l) (max 0 $ r+1-playerx)
 
@@ -848,8 +849,8 @@ depthSound depth = do
 closeShaveSound distance = do
   let
     d = 0.2
-    v | distance==1 = 0.5
-      | distance==2 = 0.4
+    v | distance<=1 = 0.4
+      | distance<=2 = 0.1
       | otherwise   = 0
   soxPlay False [
     show d, "brownnoise",
