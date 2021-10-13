@@ -823,9 +823,9 @@ gameStartSound = void $ forkIO $ do
   soxPlay False [".5","sine","400-100","vol",show v]
 
 depthSound depth = do
-  let v = 0.4
+  let v = 0.3
   soxPlay False [".15", "sine", show $ 100 + depth, "vol", show v]
-  soxPlay False [".15", "sine", show $ 1000 - depth, "vol", show $ v/2]
+  soxPlay False [".15", "sine", show $ 1000 - depth, "vol", show $ v/3]
 
 -- trying to mimic a variable constant hiss with short sounds - too fragile
 -- speedSound speed = do
@@ -849,7 +849,7 @@ closeShaveSound distance = do
   let
     d = 0.2
     v | distance==1 = 0.5
-      | distance==2 = 0.2
+      | distance==2 = 0.4
       | otherwise   = 0
   soxPlay False [
     show d, "brownnoise",
@@ -874,11 +874,9 @@ printCrashSoundVolumes = do
   putStr $ unlines $ reverse $ [printf "%5.f  %4.1f " s v ++ replicate (round $ v * 10) '*' | (s,v) <- vols]
   where vols = [(s, crashSoundVolume s) | s <- [0,5..60::Speed]]
 
-highScoreSound = do
-  soxPlay False [".1 sine 800 sine 800 delay 0 +.2"]
+highScoreSound = soxPlay False [".1 sine 800 sine 800 delay 0 +.2"]
 
-gameEndHighScoreSound = do
-  soxPlay False [".05 sine 400 sine 500 sine 600 sine 800 sine 800 delay "++delay++" +.1 +.1 +.1 +.2"] where delay = show $ restartdelaysecs / 2
+gameEndHighScoreSound = soxPlay False [".05 sine 400 sine 500 sine 600 sine 800 sine 800 delay "++delay++" +.1 +.1 +.1 +.2"] where delay = show $ restartdelaysecs / 2
 
 victorySound = do
   playTone (200,100)
