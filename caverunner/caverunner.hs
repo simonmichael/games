@@ -897,7 +897,7 @@ gameStartSound = void $ forkIO $ do
 
 depthSound depth = do
   let v = 0.3
-  soxPlay False [".15", "sine", show $ 100 + depth, "vol", show v]
+  -- soxPlay False [".15", "sine", show $ 100 + depth, "vol", show v]
   soxPlay False [".15", "sine", show $ 1000 - depth, "vol", show $ v/3]
 
 -- trying to mimic a variable constant hiss with short sounds - too fragile
@@ -921,7 +921,7 @@ depthSound depth = do
 closeShaveSound distance = do
   let
     d = 0.2
-    v | distance<=1 = 0.4
+    v | distance<=1 = 0.3
       | distance<=2 = 0.1
       | otherwise   = 0
   soxPlay False [
