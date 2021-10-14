@@ -58,7 +58,8 @@ banner = unlines [
   ,"/ /__/ /_/ /| |/ /  __/ /  / /_/ / / / / / / /  __/ /    "
   ,"\\___/\\__,_/ |___/\\___/_/   \\__,_/_/ /_/_/ /_/\\___/_/     "
   ]
-usage termsize msoxpath SavedState{..} sscores = banner ++ unlines [
+
+usage termsize msoxpath sstate@SavedState{..} sscores = banner ++ unlines [
    "--------------------------------------------------------------------------------" -- 80
   ,"caverunner "++version++" - a small terminal game by Simon Michael."
   ,""
@@ -77,9 +78,7 @@ usage termsize msoxpath SavedState{..} sscores = banner ++ unlines [
   ,""
   ,"Currently running cave "++show currentcave++" at speed "++show currentspeed++"; "
    ++ "your best score is " ++ show highscore ++ "."
-  ,if highcave == 0
-   then "You have not completed a cave."
-   else "Your highest completed cave is cave " ++ show highcave ++ "."
+  ,cavesStatusMessage sstate
   ,"Your terminal size is "++termsize++". (80x25 terminals are best for competition play.)"
   ]
   ++ case msoxpath of
@@ -92,6 +91,13 @@ usage termsize msoxpath SavedState{..} sscores = banner ++ unlines [
       ]
   where
     highscore = fromMaybe 0 $ M.lookup (currentcave, currentspeed) sscores
+
+cavesStatusMessage SavedState{..} =
+  -- "You have not completed a cave."
+  "You have completed " ++ cavecompleted ++ ", and can reach caves 1 to " ++ show maxcave ++ "."
+  where
+    cavecompleted = if highcave==0 then "no caves" else "cave "++show highcave
+    maxcave = highcave + cavelookahead
 
 -------------------------------------------------------------------------------
 -- tweakable parameters
@@ -304,15 +310,11 @@ main = do
             "SPEED should be 1-60 (received "++a++"), see --help)"
           checkcave c
             | c <= highcave + cavelookahead = c
-            | otherwise = err $ init $ unlines [
+            | otherwise = err $ unlines [
                  ""
-                ,"You have completed " ++ cavecompleted ++ ", and can reach caves 1 to " ++ show maxcave ++ "."
-                ,"You must complete at least cave "++ show reqcave ++ " to reach cave "++show c ++ "."
+                ,cavesStatusMessage sstate
+                ,"You must complete at least cave "++ show (c-cavelookahead) ++ " to reach cave "++show c ++ "."
                 ]
-                where
-                  cavecompleted = if highcave==0 then "no caves" else "cave "++show highcave
-                  reqcave = c - cavelookahead
-                  maxcave = highcave + cavelookahead
 
   cavenum `seq` if
     --  | "--print-speed-sound-volume" `elem` flags -> printSpeedSoundVolumes
