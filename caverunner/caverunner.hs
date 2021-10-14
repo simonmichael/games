@@ -58,9 +58,8 @@ banner = unlines [
   ,"/ /__/ /_/ /| |/ /  __/ /  / /_/ / / / / / / /  __/ /    "
   ,"\\___/\\__,_/ |___/\\___/_/   \\__,_/_/ /_/_/ /_/\\___/_/     "
   ]
-usage termsize msoxpath = banner ++ unlines [
-    ------------------------------------------------------------------------------80
-   ""
+usage termsize msoxpath SavedState{..} sscores = banner ++ unlines [
+   "--------------------------------------------------------------------------------" -- 80
   ,"caverunner "++version++" - a small terminal game by Simon Michael."
   ,""
   ,"Thrillseeking drone pilots dive the solar system's caves, competing for glory!"
@@ -70,14 +69,18 @@ usage termsize msoxpath = banner ++ unlines [
   ,"Usage:"
   ,"caverunner.hs                            # install deps, compile, run the game"
   ,"caverunner [CAVE [SPEED]]                # run the game"
-  ,"caverunner --print-cave [CAVE [DEPTH]]   # print the cave to stdout"
+  ,"caverunner --print-cave [CAVE [DEPTH]]   # show the cave on stdout"
   ,"caverunner --help|-h                     # show this help"
   ,""
-  ,"CAVE and SPEED select a different cave (1..<highest cave finished + "++show cavelookahead++">)"
-  ,"and maximum dive speed (1..60)."
+  ,"CAVE selects a different cave, from 1 to <highest completed + "++show cavelookahead++">."
+  ,"SPEED sets a different maximum dive speed, from 1 to 60."
   ,""
-  ,"Your current terminal is "++termsize++". 80x25 terminals are best for competition play."
-  ,""
+  ,"Currently running cave "++show currentcave++" at speed "++show currentspeed++"; "
+   ++ "your best score is " ++ show highscore ++ "."
+  ,if highcave == 0
+   then "You have not completed a cave."
+   else "Your highest completed cave is cave " ++ show highcave ++ "."
+  ,"Your terminal size is "++termsize++". (80x25 terminals are best for competition play.)"
   ]
   ++ case msoxpath of
     Nothing -> unlines [
@@ -87,6 +90,8 @@ usage termsize msoxpath = banner ++ unlines [
     Just soxpath -> unlines [
       "Sound effects are enabled, using " ++ soxpath ++ ". --no-sound to disable."
       ]
+  where
+    highscore = fromMaybe 0 $ M.lookup (currentcave, currentspeed) sscores
 
 -------------------------------------------------------------------------------
 -- tweakable parameters
@@ -273,9 +278,9 @@ saveScores      = maybeSave scoresfilename
 
 main = do
   args <- getArgs
-  when ("-h" `elem` args || "--help" `elem` args) exitWithUsage
   sstate@SavedState{..} <- fromMaybe newSavedState <$> loadState
   sscores               <- fromMaybe newSavedScores <$> loadScores
+  when ("-h" `elem` args || "--help" `elem` args) $ exitWithUsage sstate sscores
   let
     (flags, args') = partition ("-" `isPrefixOf`) args
     flag = (`elem` flags)
@@ -294,8 +299,8 @@ main = do
             | c <= highcave + cavelookahead = c
             | otherwise = err $ init $ unlines [
                  ""
-                ,"You have completed " ++ cavecompleted ++ ", and can reach caves 1.." ++ show maxcave
-                ,"You must complete at least cave "++ show reqcave ++ " to reach cave "++show c
+                ,"You have completed " ++ cavecompleted ++ ", and can reach caves 1 to " ++ show maxcave ++ "."
+                ,"You must complete at least cave "++ show reqcave ++ " to reach cave "++show c ++ "."
                 ]
                 where
                   cavecompleted = if highcave==0 then "no caves" else "cave "++show highcave
@@ -665,12 +670,12 @@ maybeSave filename val = do
 -------------------------------------------------------------------------------
 -- utilities
 
-exitWithUsage = do
+exitWithUsage sstate sscores = do
   clearScreen
   setCursorPosition 0 0
   termsize <- displaySizeStrSafe
   msox <- findExecutable "sox"
-  putStr $ usage termsize msox
+  putStr $ usage termsize msox sstate sscores
   exitSuccess
 
 -- XXX not working
