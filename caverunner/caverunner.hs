@@ -292,14 +292,17 @@ main = do
             "SPEED should be 1-60 (received "++a++"), see --help)"
           checkcave c
             | c <= highcave + cavelookahead = c
-            | otherwise = err $
-              "You can't reach cave "++show c++" yet.\n" ++
-              "Having completed " ++ cavecompleted ++ ", you can access up to cave " ++ maxcave ++ "."
+            | otherwise = err $ init $ unlines [
+                 ""
+                ,"You have completed " ++ cavecompleted ++ ", and can reach caves 1.." ++ show maxcave
+                ,"You must complete at least cave "++ show reqcave ++ " to reach cave "++show c
+                ]
                 where
                   cavecompleted = if highcave==0 then "no caves" else "cave "++show highcave
-                  maxcave = show $ highcave + cavelookahead
+                  reqcave = c - cavelookahead
+                  maxcave = highcave + cavelookahead
 
-  if
+  cavenum `seq` if
     --  | "--print-speed-sound-volume" `elem` flags -> printSpeedSoundVolumes
 
     | "--print-cave" `elem` flags ->
