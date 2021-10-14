@@ -882,8 +882,13 @@ soxPlay synchronous args = do
   case msox of
     Nothing  -> return ()
     Just sox ->
-      (if synchronous then callCommand else void . spawnCommand) $
-      sox ++ " -V0 -qnd synth " ++ unwords args
+      (if synchronous then callCommand else void . spawnCommand)
+      (sox ++ " -V0 -qnd synth " ++ unwords args)
+      -- XXX try to catch the occasional failures like
+      -- "/bin/sh: spawnCommand: fork: resource exhausted (Resource temporarily unavailable)" (repeated games at speed 60)
+      -- "/bin/sh: spawnCommand: posix_spawnp: does not exist (No such file or directory)" (at speed 60)
+      `catch` \(e::IOException) ->
+        putStrLn $ "exception when running sox (" ++ show synchronous ++ "): " ++ show e
 
 -- Like soxPlay, but plays a tone.
 soxPlayTone :: Bool -> Tone -> IO ()

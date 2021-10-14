@@ -52,10 +52,6 @@ but couldn't easily get user input.
 
 ## Roadmap/Wishlist
 
-- reproduce/catch sound errors
-  - "/bin/sh: spawnCommand: fork: resource exhausted (Resource temporarily unavailable)" repeated games at speed 60
-  - "/bin/sh: spawnCommand: posix_spawnp: does not exist (No such file or directory)" at speed 60
-  - more efficient sox commands
 - high score message
 - win message
 - win sound effect/tune
@@ -65,8 +61,11 @@ but couldn't easily get user input.
 - light/dark schemes ? cf Terminal.app silver aerogel
 - attract mode / high score table
 - better run/install docs
-- 1.0 release
 - show actual frame rate
+- reproduce/test catching of sox spawning errors
+- more efficient sox commands
+- beta test
+- 1.0 release
 - more sideways cave movement ?
 - alternate player control schemes
   - accelerate sideways ?
