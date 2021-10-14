@@ -509,10 +509,10 @@ timeToQuit g@GameState{..}
   | restart = True        -- yes if a key was pressed after game over
   | otherwise = False
 
--- If this game is showing onscreen help, is it time to hide it yet ?
--- True in the first game of a session when a certain amount of game time has passed
--- and any of the movement keys have been pressed and the game is not paused.
--- True in subsequent games when the game is not paused.
+-- If onscreen help is being shown, is it time to hide it yet ?
+-- In the first game of a session, true after a certain amount of game time
+-- and any movement keys have been pressed and the game is not paused.
+-- In subsequent games, true when the game is not paused.
 timeToHideHelp GameState{..}
   | firstgame = gtick > secsToTicks minhelpsecs && controlspressed && not pause
   | otherwise = not pause
