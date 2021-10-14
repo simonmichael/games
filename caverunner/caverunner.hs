@@ -102,6 +102,7 @@ spacechar          = ' '
 crashchar          = '*'
 fps                = 60  -- target frame rate; computer/terminal may not achieve it
 restartdelaysecs   = 3   -- minimum pause after game over
+minhelpsecs        = 5   -- minimum time to show onscreen help in first game
 
 {- Three widths:
 
@@ -187,11 +188,14 @@ data GameState = GameState {
   -- options
    stats           :: Bool       -- whether to show statistics
   -- current app state
-  ,scene           :: Scene      -- current app/game mode
+  ,firstgame       :: Bool       -- is this the first game since app start ? (affects help)
+  ,controlspressed :: Bool       -- have any movement keys been pressed since game start ? (affects help)
+  ,showhelp        :: Bool       -- keep showing the on-screen help ?
   ,pause           :: Bool       -- keep things paused ?
   ,restarttimer    :: Timed Bool -- delay after game over before allowing a restart keypress
-  ,restart         :: Bool       -- time to restart after game over ?
-  ,exit            :: Bool       -- time to exit the app ?
+  ,restart         :: Bool       -- is it time to restart after game over ?
+  ,exit            :: Bool       -- is it time to exit the app ?
+  ,scene           :: Scene      -- current app/game mode
   -- current game state
   ,gamew           :: Width      -- width of the game  (but perhaps not the screen)
   ,gameh           :: Height     -- height of the game (and usually the screen)
@@ -215,13 +219,16 @@ data GameState = GameState {
   }
   deriving (Show)
 
-newGameState stats w h cavenum maxspeed hs = GameState {
+newGameState firstgame stats w h cavenum maxspeed hs = GameState {
    stats           = stats
-  ,scene           = Playing
+  ,firstgame       = firstgame
+  ,controlspressed = False
+  ,showhelp        = True
   ,pause           = False
   ,restart         = False
   ,exit            = False
   ,restarttimer    = creaBoolTimer $ secsToTicks restartdelaysecs
+  ,scene           = Playing
   ,gamew           = w
   ,gameh           = h
   ,gtick           = 0
@@ -316,13 +323,13 @@ main = do
 
     | otherwise -> do
       let sstate' = sstate{ currentcave=cavenum, currentspeed=speed }
-      playGames (flag "--stats") cavenum (fromIntegral speed) sstate' sscores
+      playGames True (flag "--stats") cavenum (fromIntegral speed) sstate' sscores
 
 -- Generate the cave just like the game would, printing each line to stdout.
 -- Optionally, limit to just the first N lines.
 printCave cavenum mdepth = do
   putStrLn $ progname ++ " cave "++show cavenum
-  go mdepth $ newGameState False gamewidth 25 cavenum 15 0
+  go mdepth $ newGameState False False gamewidth 25 cavenum 15 0
   where
     go (Just 0) _ = return ()
     go mremaining g@GameState{..} =
@@ -348,12 +355,12 @@ printCave cavenum mdepth = do
 
 -- Play the game repeatedly, optionally showing stats, at the given cave and speed,
 -- updating the save file and/or advancing to next cave when appropriate.
-playGames :: Bool -> CaveNum -> MaxSpeed -> SavedState -> SavedScores -> IO ()
-playGames stats cavenum maxspeed sstate@SavedState{..} sscores = do
+playGames :: Bool -> Bool -> CaveNum -> MaxSpeed -> SavedState -> SavedScores -> IO ()
+playGames firstgame stats cavenum maxspeed sstate@SavedState{..} sscores = do
   (_,screenh) <- displaySize  -- use full screen height for each game (apparently last line is unusable on windows ? surely it's fine)
   let
     highscore = fromMaybe 0 $ M.lookup (cavenum, maxspeed) sscores
-    game = newGame stats screenh cavenum maxspeed highscore
+    game = newGame firstgame stats screenh cavenum maxspeed highscore
 
   g@GameState{score,exit} <- Terminal.Game.playGameS game  -- run one game, will fail if terminal is too small
   saveState sstate  -- if cave or speed are new (and game started), remember them
@@ -370,54 +377,64 @@ playGames stats cavenum maxspeed sstate@SavedState{..} sscores = do
       ,highcave     = highcave'
       }
   saveScores sscores'  -- if there's a new high score, save it
-  playGames stats cavenum' maxspeed sstate' sscores' & unless exit
+  playGames False stats cavenum' maxspeed sstate' sscores' & unless exit
 
 -- Initialise a new game (a cave run).
-newGame :: Bool -> Height -> CaveNum -> MaxSpeed -> Score -> Game GameState
-newGame stats gameh cavenum maxspeed hs =
+newGame :: Bool -> Bool -> Height -> CaveNum -> MaxSpeed -> Score -> Game GameState
+newGame firstgame stats gameh cavenum maxspeed hs =
   Game { gScreenWidth   = gamewidth, -- width used (and required) for drawing (a constant 80 for repeatable caves)
          gScreenHeight  = gameh,     -- height used for drawing (the screen height)
          gFPS           = fps,       -- target frames/game ticks per second
-         gInitState     = newGameState stats gamewidth gameh cavenum maxspeed hs,
-         gLogicFunction = step,
+         gInitState     = newGameState firstgame stats gamewidth gameh cavenum maxspeed hs,
+         gLogicFunction = step',
          gDrawFunction  = draw,
-         gQuitFunction  = quit
+         gQuitFunction  = timeToQuit
        }
 
 -------------------------------------------------------------------------------
 -- event handlers & game logic for each scene
 
+-- Updates that should happen on every tick, no matter what.
+step' g@GameState{..} Tick = step g' Tick
+  where 
+    g' = g{
+       gtick=gtick+1
+      ,showhelp=showhelp && not (timeToHideHelp g)
+      }
+step' g ev = step g ev
+
 step g@GameState{scene=Playing, ..} (KeyPress k)
-  | k == 'q'              = g { exit = True }
-  | k `elem` "p ", pause  = g { pause = False }
-  | k `elem` "p "         = g { pause = True }
+  | k == 'q'              = g { exit=True }
+  | k `elem` "p ", pause  = g { pause=False }
+  | k `elem` "p "         = g { pause=True,  showhelp=True }
   | not pause, k == leftkey =
       g { playerx   = max 1 (playerx - 1)
         , cavespeed = max cavespeedmin (cavespeed * cavespeedbrake)
+        , controlspressed = True
         }
   | not pause, k == rightkey =
       g { playerx   = min gamew (playerx + 1)
         , cavespeed = max cavespeedmin (cavespeed * cavespeedbrake)
+        , controlspressed = True
         }
   | otherwise = g
 
 step g@GameState{scene=Playing, ..} Tick =
   let
-    g' = g{gtick = gtick+1}
     gamestart = gtick==0
     gameover  = playerCrashed g
     victory   = playerAtEnd g
   in
     if
       | pause ->  -- paused
-        g'
+        g
 
-      | gamestart -> unsafePlay gameStartSound g'
+      | gamestart -> unsafePlay gameStartSound g
 
       | gameover ->  -- crashed / reached the end
         unsafePlay (if victory then victorySound else crashSound cavespeed) $
         (if score > highscore then unsafePlay gameEndHighScoreSound else id) $
-        g'{scene        = if victory then Won else Crashed
+        g{ scene        = if victory then Won else Crashed
           ,highscore    = max score highscore
           ,restarttimer = reset restarttimer
           }
@@ -430,22 +447,22 @@ step g@GameState{scene=Playing, ..} Tick =
            cavewidth',
            randomgen',
            cavecenter',
-           cavelines') = stepCave     g'
-          speedpan'    = stepSpeedpan g' cavesteps' cavespeed' cavelines'
-          score'       = stepScore    g' cavesteps'
-          -- depth        = playerDepth g'
-          walldist     = fromMaybe 9999 $ playerWallDistance g'
+           cavelines') = stepCave     g
+          speedpan'    = stepSpeedpan g cavesteps' cavespeed' cavelines'
+          score'       = stepScore    g cavesteps'
+          -- depth        = playerDepth g
+          walldist     = fromMaybe 9999 $ playerWallDistance g
         in
           -- (if cavesteps `mod` 5 == 4 -- && cavespeed' > 5 
           --   then unsafePlay $ speedSound cavespeed' else id) $
           -- XXX trying very hard to start the beeps at cave mouth, no success
           -- (if depth>0 && (depth-1) `mod` 5 == 1 
-          -- (if cavesteps'>playerHeight g' && cavesteps' `mod` 5 == 0
+          -- (if cavesteps'>playerHeight g && cavesteps' `mod` 5 == 0
           (if cavesteps `mod` 5 == 2
             then unsafePlay $ depthSound cavesteps' else id) $
           (if walldist <= 2 then unsafePlay $ closeShaveSound walldist else id) $
           -- (if score <= highscore && score' > highscore then unsafePlay highScoreSound else id) $
-          g'{randomgen    = randomgen'
+          g{ randomgen    = randomgen'
             ,score        = score'
             ,speedpan     = speedpan'
             ,cavesteps    = cavesteps'
@@ -462,7 +479,7 @@ step g@GameState{scene=Playing, ..} Tick =
           (cavespeed',
            cavespeedmin') = stepSpeed g
         in
-          g'{cavetimer    = tick cavetimer
+          g{ cavetimer    = tick cavetimer
             ,cavespeed    = cavespeed'
             ,cavespeedmin = cavespeedmin'
             }
@@ -486,11 +503,19 @@ step GameState{..} Tick = error $ "No handler for " ++ show scene ++ " -> " ++ s
 -- logic helpers
 
 -- Should the current game be ended ?
-quit g@GameState{..}
+timeToQuit g@GameState{..}
   | exit = True           -- yes if q was pressed
   | pause = False         -- no if paused
   | restart = True        -- yes if a key was pressed after game over
   | otherwise = False
+
+-- If this game is showing onscreen help, is it time to hide it yet ?
+-- True in the first game of a session when a certain amount of game time has passed
+-- and any of the movement keys have been pressed and the game is not paused.
+-- True in subsequent games when the game is not paused.
+timeToHideHelp GameState{..}
+  | firstgame = gtick > secsToTicks minhelpsecs && controlspressed && not pause
+  | otherwise = not pause
 
 stepSpeed :: GameState -> (Speed, Speed)
 stepSpeed GameState{..} = (speed', minspeed')
@@ -726,7 +751,7 @@ draw g@GameState{..} =
   -- & (1, 1)          % blankPlane gamew 1
   & (1, titlex)     % drawTitle g
   & (1, cavenamex)  % drawCaveName g
-  & (if cavesteps < 25 || pause then (3, helpx) % drawHelp g else id)
+  & (if showhelp then (3, helpx) % drawHelp g else id)
   & (1, highscorex) % drawHighScore g
   & (1, scorex)     % drawScore g
   & (1, speedx)     % drawSpeed g
