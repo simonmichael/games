@@ -10,14 +10,14 @@
   --package process
   --package safe
 -}
--- stack (https://www.fpcomplete.com/haskell/get-started) is the easy
--- way to run this script reliably. On first run the script may seem
+-- stack (https://www.fpcomplete.com/haskell/get-started) is the easiest
+-- way to run this program reliably. On first run the script may seem
 -- to hang (perhaps for minutes) while downloading and unpacking GHC;
 -- change to --verbosity=info above to see more output.
 --
--- You can also use cabal and/or your system package manager to
--- install the above haskell packages and a suitable GHC version (eg
--- 8.10), then compile the script.
+-- You can also use cabal and/or your system package manager to install
+-- the above haskell packages and a suitable GHC version (eg 8.10),
+-- and then compile the script.
 
 -------------------------------------------------------------------------------
 -- language & imports
@@ -642,7 +642,7 @@ load filename = do
     <$> readFile f    
 
 -- Write a value to the named save file, using show,
--- creating our save directory if it does not exist.
+-- creating the save directory if it does not exist.
 save :: Show a => FilePath -> a -> IO ()
 save filename val = do
   d <- getSaveDir
@@ -670,9 +670,13 @@ exitWithUsage = do
   putStr $ usage termsize msox
   exitSuccess
 
-displaySizeStrSafe = do
-  (w,h) <- displaySize `catch` \(_::SomeException) -> return (0,0)  -- XXX not working
+-- XXX not working
+displaySizeStrSafe = (do
+  (w,h) <- displaySize 
   return $ show w++"x"++show h
+  )
+  `catch` \(_::SomeException) -> 
+     return "unknown"
 
 -- Convert seconds to game ticks based on global frame rate.
 secsToTicks :: Float -> Integer
