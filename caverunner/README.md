@@ -86,4 +86,3 @@ but couldn't easily get user input.
   - clearer short sounds (don't always clip/muffle sounds < 100ms)
   - continuous/dynamic length sounds (keep playing thruster sound until player stops)
   - wind noise, rising with speed (in caves with atmospheres)
-- victory bonus, 100 x speed (once braking is added, or for scores comparable across speeds)
