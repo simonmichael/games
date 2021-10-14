@@ -52,6 +52,22 @@ but couldn't easily get user input.
 
 ## Roadmap/Wishlist
 
+- more robust sound
+  - reproduce/reduce/handle spawn errors
+    - run 4 instances at speed 60
+    - understand process lifetimes
+      - why dead processes hanging around ? 
+      - is it only in GHCI ? 
+      - does every run in GHCI add more ?
+      - why does pgrep not show them ?
+    - test/refine exception catching
+    - use more efficient sox commands
+  - test latency on other machines, windows
+
+
+
+...
+- mention p/space somewhere
 - high score message
 - win message
 - win sound effect/tune
@@ -62,8 +78,6 @@ but couldn't easily get user input.
 - attract mode / high score table
 - better run/install docs
 - show actual frame rate
-- reproduce/test catching of sox spawning errors
-- more efficient sox commands
 - beta test
 - 1.0 release
 - more sideways cave movement ?
