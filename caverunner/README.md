@@ -32,7 +32,7 @@ Installable/playable game,
 occasional development/maintenance,
 help welcome,
 last notable updates 2021,
-developer-hours ~40,
+developer-hours ~80,
 discussion/support [#haskell-game on matrix](https://matrix.to/#/#haskell-game:matrix.org) or [IRC](https://web.libera.chat/#haskell-game).
 
 ## Dev notes
@@ -52,11 +52,10 @@ but couldn't easily get user input.
 
 ## Roadmap/Wishlist
 
-- winning unlocks next caves
-- catch sound errors
+- reproduce/catch sound errors
   - "/bin/sh: spawnCommand: fork: resource exhausted (Resource temporarily unavailable)" repeated games at speed 60
   - "/bin/sh: spawnCommand: posix_spawnp: does not exist (No such file or directory)" at speed 60
-- more efficient sox commands
+  - more efficient sox commands
 - high score message
 - win message
 - win sound effect/tune
