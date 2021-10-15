@@ -52,21 +52,8 @@ but couldn't easily get user input.
 
 ## Roadmap/Wishlist
 
-- more robust sound
-  - reproduce/reduce/handle spawn errors
-    - run 4 instances at speed 60
-    - understand process lifetimes
-      - why dead processes hanging around ? 
-      - is it only in GHCI ? 
-      - does every run in GHCI add more ?
-      - why does pgrep not show them ?
-    - test/refine exception catching
-    - use more efficient sox commands
-  - test latency on other machines, windows
-
-
-
-...
+- use more efficient sox commands
+- test sound latency on other machines, windows
 - mention p/space somewhere
 - high score message
 - win message

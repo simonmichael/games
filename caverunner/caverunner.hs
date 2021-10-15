@@ -7,8 +7,8 @@
   --package directory
   --package filepath
   --package pretty-simple
-  --package process
   --package safe
+  --package typed-process
 -}
 -- stack (https://www.fpcomplete.com/haskell/get-started) is the easiest
 -- way to run this program reliably. On first run the script may seem
@@ -42,7 +42,7 @@ import System.Exit
 import System.FilePath
 import System.IO
 import System.IO.Unsafe (unsafePerformIO)
-import System.Process
+import System.Process.Typed
 import Terminal.Game
 import Text.Pretty.Simple (pPrint)
 import Text.Printf
@@ -871,27 +871,37 @@ type Tone = (Hz, Ms)
 type Hz = Float
 type Ms = Int
 
--- Arguments to follow sox's `synth`, such as ["200","sine","1000"] (200hz sine wave for 1000ms).
+-- Arguments to follow sox's `synth`, such as ["1","sine","200"] (a 1 second 200hz sine wave).
 type SynthArgs = [String]
 
--- Play a synthesised sound with sox if possible (if it is installed in PATH),
--- optionally blocking until the sound finishes playing, otherwise spawning
--- a thread to play it.
--- Limitations: there's a short delay before/after a sound, so sequences
--- have audible gaps between the sounds.
+-- Play a synthesised sound with sox if possible, optionally blocking until the sound
+-- finishes playing, otherwise spawning a process to play it.
+-- This plays a sound if it can, and otherwise does nothing, ignoring all errors.
+-- The SynthArgs are arbitrary arguments following sox's `synth` command, allowing
+-- complex sounds, chords and note sequences to be built up.
+-- When possible, use sox's features to combine multiple notes into a single sound
+-- and call this once, minimising subprocesses and audible gaps between notes.
+-- If no SynthArgs are provided, this plays a one second tone.
 soxPlay :: Bool -> SynthArgs -> IO ()
-soxPlay synchronous args = do
-  msox <- findExecutable "sox" -- XXX not noticeably slow, but should cache
-  case msox of
-    Nothing  -> return ()
-    Just sox ->
-      (if synchronous then callCommand else void . spawnCommand)
-      (sox ++ " -V0 -qnd synth " ++ unwords args)
-      -- XXX try to catch the occasional failures like
-      -- "/bin/sh: spawnCommand: fork: resource exhausted (Resource temporarily unavailable)" (repeated games at speed 60)
-      -- "/bin/sh: spawnCommand: posix_spawnp: does not exist (No such file or directory)" (at speed 60)
-      `catch` \(e::IOException) ->
-        putStrLn $ "exception when running sox (" ++ show synchronous ++ "): " ++ show e
+soxPlay synchronous args = runQuietly synchronous $
+  -- traceShowId $
+  "sox -V0 -qnd synth " ++ unwords (if null args then ["1"] else args)
+
+-- Quietly try to run a shell command, either synchronously or in a background process,
+-- ignoring any output, errors or exceptions.
+runQuietly :: Bool -> String -> IO ()
+runQuietly synchronous = 
+  silenceExceptions .
+  (if synchronous then void else void . forkIO) . void . runProcess . 
+  silenceOutput . 
+  shell
+
+silenceExceptions :: IO () -> IO ()
+silenceExceptions = handle (\(e::IOException) -> -- trace (show e) $ 
+  return ())
+
+silenceOutput :: ProcessConfig i o e -> ProcessConfig i () ()
+silenceOutput = setStdout nullStream . setStderr nullStream
 
 -- Like soxPlay, but plays a tone.
 soxPlayTone :: Bool -> Tone -> IO ()
