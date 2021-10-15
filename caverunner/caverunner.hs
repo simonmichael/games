@@ -74,11 +74,12 @@ usage termsize msoxpath sstate@SavedState{..} sscores = banner ++ unlines [
   ,"caverunner --help|-h                     # show this help"
   ,""
   ,"CAVE selects a different cave, from 1 to <highest completed + "++show cavelookahead++">."
-  ,"SPEED sets a different maximum dive speed, from 1 to 60."
+  ,cavesStatusMessage sstate
   ,""
+  ,"SPEED sets a different maximum dive speed, from 1 to 60."
   ,"Currently running cave "++show currentcave++" at speed "++show currentspeed++"; "
    ++ "your best score is " ++ show highscore ++ "."
-  ,cavesStatusMessage sstate
+  ,""
   ,"Your terminal size is "++termsize++". (80x25 terminals are best for competition play.)"
   ]
   ++ case msoxpath of
