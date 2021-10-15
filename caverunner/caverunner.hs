@@ -767,7 +767,7 @@ draw g@GameState{..} =
     highscorew = 17
     scorew     = 11
     speedw     = 10
-    gameoverw  = 30
+    gameoverw  = 40
     gameoverh  = 7
 
     titlex     = 1
@@ -781,20 +781,6 @@ draw g@GameState{..} =
 
 -------------------------------------------------------------------------------
 -- drawing helpers
-
-drawGameOver GameState{..} w h =
-  box w h '-'
-  & (2,2) % box (w-2) (h-2) ' '
-  & (txty,txtx) % stringPlane txt
-  & (if isExpired restarttimer then (txty+2,txtx-7) % stringPlane "press a key to continue" else id)
-  where
-    innerw = w - 2
-    innerh = h - 2
-    txt = "GAME OVER"
-    txtw = fromIntegral $ length txt
-    txth = 2
-    txtx = 2 + half innerw - half txtw
-    txty = 3
 
 drawCave GameState{..} =
   vcat $
@@ -833,10 +819,10 @@ drawTitle GameState{..} =
 drawCaveName GameState{..} = stringPlane $ " cave "++show cavenum++" @ "++show (round cavespeedmax) ++ " "
 
 drawHelp GameState{..} =
-      (cell leftkey  #bold  ||| stringPlane " left ")
-  === (cell rightkey #bold  ||| stringPlane " right ")
-  === (cell 'p'      #bold  ||| if pause then stringPlane " pause " #bold else stringPlane " pause ")
-  === (cell 'q'      #bold  ||| if exit then stringPlane " quit " #bold else stringPlane " quit ")
+      (stringPlane (" "++[leftkey]++" ")  #bold  ||| stringPlane " left ")
+  === (stringPlane (" "++[rightkey]++" ") #bold  ||| stringPlane " right ")
+  === (stringPlane "spc" #bold  ||| if pause then stringPlane " pause " #bold else stringPlane " pause ")
+  === (stringPlane " q " #bold  ||| if exit then stringPlane " quit " #bold else stringPlane " quit ")
 
 drawHighScore g@GameState{..} =
   stringPlane " high score " ||| (stringPlane (printf "%04d " highscore) & maybebold)
@@ -857,6 +843,26 @@ drawStats g@GameState{..} =
   === (stringPlane " minspeed " ||| stringPlane (printf "%3.f " cavespeedmin))
   -- === (stringPlane " speedpan " ||| stringPlane (printf "%3d " speedpan))
   -- === (stringPlane "    speed " ||| stringPlane (printf "%3.f " cavespeed))
+
+drawGameOver g@GameState{..} w h =
+  box w h '-'
+  & (2,2) % box (w-2) (h-2) ' '
+  & (txty,txtx) % stringPlane txt
+  & (txty+1,txtx - half (length txt2 - length txt - 1)) % stringPlane txt2
+  & (if isExpired restarttimer then (txty+2,txtx-7) % stringPlane "press a key to relaunch" else id)
+  where
+    innerw = w - 2
+    innerh = h - 2
+    txt = "GAME OVER"
+    txt2 =
+      if playerAtEnd g
+      then printf "you completed cave %d. Nice flying!" cavenum
+      else printf "you reached depth %d." (playerDepth g)
+      ++ if highscore==score then " High score!" else ""
+    txtw = fromIntegral $ length txt
+    txth = 2
+    txtx = 2 + half innerw - half txtw
+    txty = 3
 
 -------------------------------------------------------------------------------
 -- sound

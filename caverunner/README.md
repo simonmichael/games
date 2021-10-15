@@ -53,10 +53,6 @@ but couldn't easily get user input.
 ## Roadmap/Wishlist
 
 - use more efficient sox commands
-- test sound latency on other machines, windows
-- mention p/space somewhere
-- high score message
-- win message
 - win sound effect/tune
 - winning grants speed-based score bonus
 - remember crash sites
@@ -66,6 +62,7 @@ but couldn't easily get user input.
 - better run/install docs
 - show actual frame rate
 - beta test
+- test sound latency on other machines, windows
 - 1.0 release
 - more sideways cave movement ?
 - alternate player control schemes
