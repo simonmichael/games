@@ -436,7 +436,7 @@ step g@GameState{scene=Playing, ..} (KeyPress k)
 
 step g@GameState{scene=Playing, ..} Tick =
   let
-    starting = gtick==0
+    starting = gtick==1
     gameover = playerCrashed g
     victory  = playerAtEnd g
   in
