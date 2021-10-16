@@ -9,6 +9,7 @@ PACKAGES=\
   --package filepath\
   --package pretty-simple\
   --package safe\
+  --package time\
   --package typed-process\
 
 ghc:

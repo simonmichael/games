@@ -8,6 +8,7 @@
   --package filepath
   --package pretty-simple
   --package safe
+  --package time
   --package typed-process
 -}
 -- stack (https://www.fpcomplete.com/haskell/get-started) is the easiest
@@ -24,7 +25,6 @@
 
 {-# OPTIONS_GHC -Wno-missing-signatures -Wno-unused-imports #-}
 {-# LANGUAGE MultiWayIf, NamedFieldPuns, RecordWildCards, ScopedTypeVariables #-}
-{-# LANGUAGE BangPatterns #-}
 
 import Control.Applicative
 import Control.Concurrent
@@ -34,6 +34,7 @@ import Data.Function (fix)
 import Data.List
 import qualified Data.Map as M
 import Data.Maybe
+import Data.Time (UTCTime(..), getCurrentTime)
 import Debug.Trace
 import Safe
 import System.Console.ANSI
@@ -295,8 +296,8 @@ saveScores      = maybeSave scoresfilename
 
 main = do
   args <- getArgs
-  sstate@SavedState{..} <- fromMaybe newSavedState <$> loadState
-  sscores               <- fromMaybe newSavedScores <$> loadScores
+  (sstate@SavedState{..}, sstatet) <- fromMaybe (newSavedState, Nothing) <$> loadState
+  (sscores, sscorest) <- fromMaybe (newSavedScores, Nothing) <$> loadScores
   when ("-h" `elem` args || "--help" `elem` args) $ exitWithUsage sstate sscores
   let
     (flags, args') = partition ("-" `isPrefixOf`) args
@@ -327,7 +328,7 @@ main = do
 
     | otherwise -> do
       let sstate' = sstate{ currentcave=cavenum, currentspeed=speed }
-      playGames True ("--stats" `elem` flags) cavenum (fromIntegral speed) sstate' sscores
+      playGames True ("--stats" `elem` flags) cavenum (fromIntegral speed) (sstate',sstatet) (sscores,sscorest)
 
 -- Generate the cave just like the game would, printing each line to stdout.
 -- Optionally, limit to just the first N lines.
@@ -354,11 +355,11 @@ printCave cavenum mdepth = do
             }
 
 -- Play the game repeatedly at the given cave and speed,
--- updating the save file and/or advancing to next cave when appropriate.
+-- updating save files and/or advancing to next cave when appropriate.
 -- The first arguments specify if this is the first game of a session and
 -- if onscreen dev stats should be displayed.
-playGames :: Bool -> Bool -> CaveNum -> MaxSpeed -> SavedState -> SavedScores -> IO ()
-playGames firstgame showstats cavenum maxspeed sstate@SavedState{..} sscores = do
+playGames :: Bool -> Bool -> CaveNum -> MaxSpeed -> (SavedState, Maybe UTCTime) -> (SavedScores, Maybe UTCTime) -> IO ()
+playGames firstgame showstats cavenum maxspeed (sstate@SavedState{..},sstatet) (sscores,sscorest) = do
   (_,screenh) <- displaySize  -- use full screen height for each game (apparently last line is unusable on windows ? surely it's fine)
   let
     highscore = fromMaybe 0 $ M.lookup (cavenum, maxspeed) sscores
@@ -366,9 +367,20 @@ playGames firstgame showstats cavenum maxspeed sstate@SavedState{..} sscores = d
 
   g@GameState{score,exit} <- Terminal.Game.playGameS game  -- run one game. Will fail if terminal is too small.
 
-  saveState sstate  -- if a game started successfully, remember the cave and speed
+  -- if the game started successfully, remember the cave and speed
+  d <- getSaveDir
+  esaved <- saveState (sstate,sstatet)
+  sstatet' <- case esaved of
+    Left msg -> hPutStrLn stderr msg >> return sstatet
+    Right t  -> return t
+
+  -- if there's a new high score, remember it
   let sscores' = M.insert (cavenum, maxspeed) (max score highscore) sscores
-  saveScores sscores'  -- if there's a new high score, remember it
+  esaved <- saveScores (sscores',sscorest)
+  sscorest' <- case esaved of
+    Left msg -> hPutStrLn stderr msg >> return sscorest
+    Right t  -> return t
+
   let
     (cavenum', highcave')
       | playerAtEnd g = (cavenum+1, max highcave cavenum)
@@ -378,7 +390,7 @@ playGames firstgame showstats cavenum maxspeed sstate@SavedState{..} sscores = d
       ,currentspeed = maxspeed
       ,highcave     = highcave'
       }
-  playGames False showstats cavenum' maxspeed sstate' sscores' & unless exit
+  playGames False showstats cavenum' maxspeed (sstate',sstatet') (sscores',sscorest') & unless exit
 
 -- Initialise a new game (a cave run).
 newGame :: Bool -> Bool -> Height -> CaveNum -> MaxSpeed -> Score -> Game GameState
@@ -652,40 +664,56 @@ playerAtEnd g = case playerLine g of
 getSaveDir :: IO FilePath
 getSaveDir = getXdgDirectory XdgData progname
 
--- Try to read a value from the named save file, using read,
--- returning Nothing if the file does not exist,
--- or exit with an error message if read fails.
-load :: Read a => FilePath -> IO (Maybe a)
+-- Try to read a value from the named save file, using read.
+-- Exits with an error message if reading fails,
+-- returns Nothing if the file does not exist,
+-- or Just (value, <current time>) if successful.
+-- This time should be passed to maybeSave when next saving to this file,
+-- to help detect write conflicts and prevent data loss.
+-- (The time is wrapped in Maybe for ease of use, but will always be Just.)
+load :: (Read a, Show a, Eq a) => FilePath -> IO (Maybe (a, Maybe UTCTime))
 load filename = do
   d <- getSaveDir
   let f = d </> filename
   exists <- doesFileExist f
   if not exists
   then pure Nothing
-  else
-    Just . readDef (err $ init $ unlines [
+  else do
+    v <- readDef (err $ init $ unlines [
       "could not read " ++ f
       ,"Perhaps the format has changed ? Please move it out of the way and run again."
-      ])
-    <$> readFile f    
+      ]) <$> readFile f
+    t <- getCurrentTime
+    return $ Just (v, Just t)
 
 -- Write a value to the named save file, using show,
 -- creating the save directory if it does not exist.
-save :: Show a => FilePath -> a -> IO ()
+-- Any previous value in the save file will be overwritten.
+save :: (Read a, Show a, Eq a) => FilePath -> a -> IO ()
 save filename val = do
   d <- getSaveDir
   createDirectoryIfMissing True d
   let f = d </> filename
   writeFile f $ show val
 
--- Like save, but don't write if the save file exists and already contains the same value.
--- Returns true if it wrote.
-maybeSave :: (Eq a, Read a, Show a) => FilePath -> a -> IO Bool
-maybeSave filename val = do
-  mold <- load filename
-  case mold of
-    Just old | old == val -> return False
-    _                     -> save filename val >> return True
+-- Like save, but more careful: avoids writing
+-- 1. unnecessarily (the save file exists and already contains the same value), or
+-- 2. unsafely (the save file has been written to since we last read it).
+-- To detect case 2, the last read time (obtained from load) should be provided.
+-- Returns Left <warning message> in case 2, Right Nothing in case 1,
+-- or Right <current time> on successful write.
+maybeSave :: (Read a, Show a, Eq a) => FilePath -> (a, Maybe UTCTime) -> IO (Either String (Maybe UTCTime))
+maybeSave filename (val,mloadtime)  = do
+  d <- getSaveDir
+  let f = d </> filename
+  modtime <- getModificationTime f
+  mvt <- load filename
+  now <- getCurrentTime
+  case (mvt, mloadtime) of
+    (Just (oldval, _), _) | oldval==val -> return $ Right Nothing
+    (Just _, Just loadtime) | modtime > loadtime -> 
+      return $ Left $ "warning: " ++ filename ++ " file was modified since last read, could not write"
+    _ -> save filename val >> return (Right $ Just now)
 
 -------------------------------------------------------------------------------
 -- utilities
