@@ -390,7 +390,9 @@ playGames firstgame showstats cavenum maxspeed (sstate@SavedState{..},sstatet) (
       ,currentspeed = maxspeed
       ,highcave     = highcave'
       }
-  playGames False showstats cavenum' maxspeed (sstate',sstatet') (sscores',sscorest') & unless exit
+  if exit
+  then quitSound
+  else playGames False showstats cavenum' maxspeed (sstate',sstatet') (sscores',sscorest')
 
 -- Initialise a new game (a cave run).
 newGame :: Bool -> Bool -> Height -> CaveNum -> MaxSpeed -> Score -> Game GameState
@@ -989,7 +991,7 @@ victorySound = do
   threadDelay 160000
   soxPlay False ["1.5 sine 200 sine 300 sine 400"]
 
-quitSound = soxPlay False [".3","sine","200-100"]
-
 dropSound = soxPlay False [".8","sine","300-1"]
 
+-- synchronous, so it can play before app exits
+quitSound = soxPlay True [".3","sine","200-100"]
