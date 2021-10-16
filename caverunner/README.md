@@ -53,7 +53,6 @@ but couldn't easily get user input.
 ## Roadmap/Wishlist
 
 - use more efficient sox commands
-- win sound effect/tune
 - winning grants speed-based score bonus
 - remember crash sites
 - cave-specific colours ?
@@ -75,11 +74,13 @@ but couldn't easily get user input.
 - more varied caves and flight mechanics
 - high score sharing / server
 - document vs code+hls setup, dev workflows
+- robust persistence
+  - do something smarter on save files write conflict ? onscreen alert ?
 - better sound
+  - don't clip end of sounds, or muffle sounds < 100ms
   - thruster sound
   - quit sound
   - soxlib / sdl-mixer with graceful fallback ?
   - sound check mode (and video check if useful) to help with setup
-  - clearer short sounds (don't always clip/muffle sounds < 100ms)
   - continuous/dynamic length sounds (keep playing thruster sound until player stops)
   - wind noise, rising with speed (in caves with atmospheres)
