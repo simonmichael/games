@@ -299,18 +299,14 @@ main = do
   when ("-h" `elem` args || "--help" `elem` args) $ exitWithUsage sstate sscores
   let
     (flags, args') = partition ("-" `isPrefixOf`) args
-    flag = (`elem` flags)
     (cavenum, speed, hasspeedarg) =
       case args' of
         []    -> (currentcave, currentspeed, False)
         [c]   -> (checkcave $ readDef (caveerr c) c, currentspeed, False)
-        [c,s] -> (checkcave $ readDef (caveerr c) c, readDef (speederr s) s, True)
+        [c,s] -> (checkcave $ readDef (caveerr c) c, checkspeed $ readDef (speederr s) s, True)
         _     -> err "too many arguments, please see --help"
         where
-          caveerr a = err $
-            "CAVE should be a natural number (received "++a++"), see --help)"
-          speederr a = err $
-            "SPEED should be 1-60 (received "++a++"), see --help)"
+          caveerr a = err $ "CAVE should be a natural number (received "++a++"), see --help)"
           checkcave c
             | c <= highcave + cavelookahead = c
             | otherwise = err $ unlines [
@@ -318,6 +314,8 @@ main = do
                 ,cavesStatusMessage sstate
                 ,"You must complete at least cave "++ show (c-cavelookahead) ++ " to reach cave "++show c ++ "."
                 ]
+          speederr a = err $ "SPEED should be 1-60 (received "++a++"), see --help)"
+          checkspeed s = if s >= 1 && s <= 60 then s else speederr $ show s
 
   cavenum `seq` if
     --  | "--print-speed-sound-volume" `elem` flags -> printSpeedSoundVolumes
@@ -328,7 +326,7 @@ main = do
 
     | otherwise -> do
       let sstate' = sstate{ currentcave=cavenum, currentspeed=speed }
-      playGames True (flag "--stats") cavenum (fromIntegral speed) sstate' sscores
+      playGames True ("--stats" `elem` flags) cavenum (fromIntegral speed) sstate' sscores
 
 -- Generate the cave just like the game would, printing each line to stdout.
 -- Optionally, limit to just the first N lines.
