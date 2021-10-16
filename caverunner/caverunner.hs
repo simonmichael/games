@@ -343,44 +343,41 @@ printCave cavenum mdepth = do
            randomgen',
            cavecenter',
            cavelines'@(l:_)) = stepCave g
-          (cavespeed',
-           cavespeedmin') = stepSpeed g
-        putStrLn $ showCaveLineWithNum gamewidth l cavesteps'
+        putStrLn $ showCaveLineNumbered gamewidth l cavesteps'
         go (fmap (subtract 1) mremaining)
            g{randomgen    = randomgen'
             ,cavesteps    = cavesteps'
             ,cavelines    = cavelines'
             ,cavewidth    = cavewidth'
             ,cavecenter   = cavecenter'
-            ,cavespeed    = cavespeed'
-            ,cavespeedmin = cavespeedmin'
             }
 
--- Play the game repeatedly, optionally showing stats, at the given cave and speed,
+-- Play the game repeatedly at the given cave and speed,
 -- updating the save file and/or advancing to next cave when appropriate.
+-- The first arguments specify if this is the first game of a session and
+-- if onscreen dev stats should be displayed.
 playGames :: Bool -> Bool -> CaveNum -> MaxSpeed -> SavedState -> SavedScores -> IO ()
-playGames firstgame stats cavenum maxspeed sstate@SavedState{..} sscores = do
+playGames firstgame showstats cavenum maxspeed sstate@SavedState{..} sscores = do
   (_,screenh) <- displaySize  -- use full screen height for each game (apparently last line is unusable on windows ? surely it's fine)
   let
     highscore = fromMaybe 0 $ M.lookup (cavenum, maxspeed) sscores
-    game = newGame firstgame stats screenh cavenum maxspeed highscore
+    game = newGame firstgame showstats screenh cavenum maxspeed highscore
 
-  g@GameState{score,exit} <- Terminal.Game.playGameS game  -- run one game, will fail if terminal is too small
-  saveState sstate  -- if cave or speed are new (and game started), remember them
+  g@GameState{score,exit} <- Terminal.Game.playGameS game  -- run one game. Will fail if terminal is too small.
 
+  saveState sstate  -- if a game started successfully, remember the cave and speed
+  let sscores' = M.insert (cavenum, maxspeed) (max score highscore) sscores
+  saveScores sscores'  -- if there's a new high score, remember it
   let
     (cavenum', highcave')
       | playerAtEnd g = (cavenum+1, max highcave cavenum)
       | otherwise     = (cavenum, highcave)
-    highscore'  = max score highscore
-    sscores'    = M.insert (cavenum, maxspeed) highscore' sscores
     sstate' = SavedState{
        currentcave  = cavenum'
       ,currentspeed = maxspeed
       ,highcave     = highcave'
       }
-  saveScores sscores'  -- if there's a new high score, save it
-  playGames False stats cavenum' maxspeed sstate' sscores' & unless exit
+  playGames False showstats cavenum' maxspeed sstate' sscores' & unless exit
 
 -- Initialise a new game (a cave run).
 newGame :: Bool -> Bool -> Height -> CaveNum -> MaxSpeed -> Score -> Game GameState
@@ -397,7 +394,7 @@ newGame firstgame stats gameh cavenum maxspeed hs =
 -------------------------------------------------------------------------------
 -- event handlers & game logic for each scene
 
--- Updates that should happen on every tick, no matter what.
+-- Before calling step, do updates that should happen on every tick no matter what.
 step' g@GameState{..} Tick = step g' Tick
   where 
     g' = g{
@@ -424,19 +421,18 @@ step g@GameState{scene=Playing, ..} (KeyPress k)
 
 step g@GameState{scene=Playing, ..} Tick =
   let
-    gamestart = gtick==0
-    gameover  = playerCrashed g
-    victory   = playerAtEnd g
+    starting = gtick==0
+    gameover = playerCrashed g
+    victory  = playerAtEnd g
   in
     if
-      | pause ->  -- paused
-        g
+      | pause -> g  -- paused
 
-      | gamestart -> unsafePlay gameStartSound g
+      | starting -> unsafePlay gameStartSound g
 
       | gameover ->  -- crashed / reached the end
         unsafePlay (if victory then victorySound else crashSound cavespeed) $
-        (if score > highscore then unsafePlay gameEndHighScoreSound else id) $
+        (if score > highscore then unsafePlay endGameHighScoreSound else id) $
         g{ scene        = if victory then Won else Crashed
           ,highscore    = max score highscore
           ,restarttimer = reset restarttimer
@@ -453,7 +449,6 @@ step g@GameState{scene=Playing, ..} Tick =
            cavelines') = stepCave     g
           speedpan'    = stepSpeedpan g cavesteps' cavespeed' cavelines'
           score'       = stepScore    g cavesteps'
-          -- depth        = playerDepth g
           walldist     = fromMaybe 9999 $ playerWallDistance g
         in
           -- (if cavesteps `mod` 5 == 4 -- && cavespeed' > 5 
@@ -464,7 +459,7 @@ step g@GameState{scene=Playing, ..} Tick =
           (if cavesteps `mod` 5 == 2
             then unsafePlay $ depthSound cavesteps' else id) $
           (if walldist <= 2 then unsafePlay $ closeShaveSound walldist else id) $
-          -- (if score <= highscore && score' > highscore then unsafePlay highScoreSound else id) $
+          -- (if score <= highscore && score' > highscore then unsafePlay inGameHighScoreSound else id) $
           g{ randomgen    = randomgen'
             ,score        = score'
             ,speedpan     = speedpan'
@@ -478,9 +473,7 @@ step g@GameState{scene=Playing, ..} Tick =
             }
 
       | otherwise ->  -- time is passing
-        let
-          (cavespeed',
-           cavespeedmin') = stepSpeed g
+        let (cavespeed', cavespeedmin') = stepSpeed g
         in
           g{ cavetimer    = tick cavetimer
             ,cavespeed    = cavespeed'
@@ -496,8 +489,8 @@ step g@GameState{..} (KeyPress _) | gameOver g, isExpired restarttimer = g{resta
 step g@GameState{..} (KeyPress _) | gameOver g = g
 
 step g@GameState{..} (KeyPress k)
-  | k `elem` "p "         = g{pause=True}
-  | k `elem` "p ", pause  = g{pause=False}
+  | k `elem` " p"         = g{pause=True}
+  | k `elem` " p", pause  = g{pause=False}
   | otherwise             = g
 
 step GameState{..} Tick = error $ "No handler for " ++ show scene ++ " -> " ++ show Tick ++ " !"
@@ -574,7 +567,7 @@ stepCave GameState{..} =
       where
         (l,r) = caveWalls cavecenter' cavewidth'
 
--- speedpan - as speed increases, pan the viewport up (player and walls move down)
+-- speedpan - as speed increases, maybe pan the viewport up (player and walls move down)
 -- with constraints:
 -- only after screen has filled with cave steps
 -- pan gradually, at most one row every few cave steps
@@ -607,9 +600,7 @@ gameOver GameState{scene} = scene `elem` [Crashed,Won]
 -- Create a timer for the next cave step, given the desired steps/s.
 -- The steps/s should be no greater than ticks/s (the frame rate),
 -- and will be capped at that (creating a one-tick timer).
-newCaveTimer stepspersec = creaBoolTimer ticks
-  where
-    ticks = max 1 (secsToTicks  $ 1 / stepspersec)
+newCaveTimer stepspersec = creaBoolTimer $ max 1 (secsToTicks  $ 1 / stepspersec)
 
 -- Calculate the cave's left and right wall coordinates from center and width.
 caveWalls center width = (center - half width, center + half width)
@@ -721,29 +712,23 @@ secsToTicks = round . (* fromIntegral fps)
 half :: Integral a => a -> a
 half = (`div` 2)
 
--- float :: Int -> Float
--- float = fromIntegral
-
--- int :: Integer -> Int
--- int = fromIntegral
-
 err = errorWithoutStackTrace
 
--- -- Execute an IO action, using unsafePerformIO, before evaluating the
--- -- second argument.
--- unsafeio :: IO a -> b -> b
--- unsafeio = seq . unsafePerformIO
+-- Run a shell command, either synchronously or in a background process,
+-- ignoring any output, errors or exceptions. ("Silent" here does not mean sound.)
+runProcessSilent :: Bool -> String -> IO ()
+runProcessSilent synchronous = 
+  silenceExceptions .
+  (if synchronous then void else void . forkIO) . void . runProcess .
+  silenceOutput . 
+  shell
 
--- Check whether sounds should be played - true unless the program was
--- run with the --no-sound flag. Uses unsafePerformIO. Won't change in a GHCI session.
-soundEnabled :: Bool
-soundEnabled = "--no-sound" `notElem` unsafePerformIO getArgs
+silenceExceptions :: IO () -> IO ()
+silenceExceptions = handle (\(e::IOException) -> -- trace (show e) $ 
+  return ())
 
--- Execute an IO action, typically one that plays a sound asynchronously,
--- before evaluating the second argument, unless sound is disabled.
--- Uses unsafePerformIO.
-unsafePlay :: IO a -> b -> b
-unsafePlay a = if soundEnabled then seq (unsafePerformIO a) else id
+silenceOutput :: ProcessConfig i o e -> ProcessConfig i () ()
+silenceOutput = setStdout nullStream . setStderr nullStream
 
 -------------------------------------------------------------------------------
 -- drawing for each scene
@@ -798,7 +783,7 @@ showCaveLine gamew (CaveLine left right) =
    ,replicate (gamew - right ) wallchar
    ]
 
-showCaveLineWithNum gamew l n =
+showCaveLineNumbered gamew l n =
   num ++ drop (length num) (showCaveLine gamew l  )
   where
     num = show n
@@ -865,87 +850,42 @@ drawGameOver g@GameState{..} w h =
     txty = 3
 
 -------------------------------------------------------------------------------
--- sound
+-- sound helpers
 
--- Play sounds with sox (http://sox.sourceforge.net), it it's in PATH.
--- Limitations:
--- - exit status is discarded; we don't know if sox is installed or succeeded
--- - there is a short gap between tones played in a sequence
+-- Check whether sounds should be played - true unless the program was
+-- run with the --no-sound flag. Uses unsafePerformIO. Won't change in a GHCI session.
+soundEnabled :: Bool
+soundEnabled = "--no-sound" `notElem` unsafePerformIO getArgs
 
--- A sound tone (usually a sine wave) with a given pitch and duration.
-type Tone = (Hz, Ms)
-type Hz = Float
-type Ms = Int
+-- Execute an IO action (typically one that plays a sound asynchronously)
+-- before evaluating the second argument, unless sound is disabled.
+-- Uses unsafePerformIO.
+unsafePlay :: IO a -> b -> b
+unsafePlay a = if soundEnabled then seq (unsafePerformIO a) else id
 
--- Arguments to follow sox's `synth`, such as ["1","sine","200"] (a 1 second 200hz sine wave).
-type SynthArgs = [String]
-
--- Play a synthesised sound with sox if possible, optionally blocking until the sound
--- finishes playing, otherwise spawning a process to play it.
--- This plays a sound if it can, and otherwise does nothing, ignoring all errors.
--- The SynthArgs are arbitrary arguments following sox's `synth` command, allowing
--- complex sounds, chords and note sequences to be built up.
--- When possible, use sox's features to combine multiple notes into a single sound
--- and call this once, minimising subprocesses and audible gaps between notes.
--- If no SynthArgs are provided, this plays a one second tone.
+-- Try to play a synthesised sound by running `sox synth` with the given arguments, 
+-- optionally blocking until the sound finishes playing, otherwise forking a background process to play it.
+-- If no SynthArgs are provided, this plays a one-second tone.
+-- This should never fail, and ignores all errors (so uncomment the trace if you need to troubleshoot).
+--
+-- Tips:
+-- When possible, combine multiple notes into a single sox sound and call this once, 
+-- minimising subprocesses and audible gaps between notes.
+-- sox seems to truncate sounds at the end for some reason; you might need to add
+-- some extra duration or a final delay to hear a sound in full.
+--
 soxPlay :: Bool -> SynthArgs -> IO ()
-soxPlay synchronous args = runQuietly synchronous $
+soxPlay synchronous args = runProcessSilent synchronous $
   -- traceShowId $
   "sox -V0 -qnd synth " ++ unwords (if null args then ["1"] else args)
 
--- Quietly try to run a shell command, either synchronously or in a background process,
--- ignoring any output, errors or exceptions.
-runQuietly :: Bool -> String -> IO ()
-runQuietly synchronous = 
-  silenceExceptions .
-  (if synchronous then void else void . forkIO) . void . runProcess . 
-  silenceOutput . 
-  shell
+-- Arguments to follow sox's `synth` command, such as ["1","sine","200"] (a 1 second 200hz sine wave).
+-- Should be one or more `synth` arguments, optionally followed by any other sox arguments,
+-- which allows complex sounds, chords and note sequences to be generated.
+type SynthArgs = [String]
 
-silenceExceptions :: IO () -> IO ()
-silenceExceptions = handle (\(e::IOException) -> -- trace (show e) $ 
-  return ())
-
-silenceOutput :: ProcessConfig i o e -> ProcessConfig i () ()
-silenceOutput = setStdout nullStream . setStderr nullStream
-
--- Like soxPlay, but plays a tone.
-soxPlayTone :: Bool -> Tone -> IO ()
-soxPlayTone synchronous (hz,ms) =
-  soxPlay synchronous [show $ fromIntegral ms / 1000, "sine", show hz]
-
--- Play a tone (blocking).
-playTone' :: Tone -> IO ()
-playTone' = soxPlayTone True
-
--- Play a sequence of tones (blocking).
-playTones' :: [Tone] -> IO ()
-playTones' = mapM_ playTone'
-
--- Play a sequence of tones N times (blocking).
-repeatTones' :: Int -> [Tone] -> IO ()
-repeatTones' n tones = playTones' $ concat $ replicate n tones
-
-
--- Play a tone (non-blocking).
-playTone :: Tone -> IO ()
-playTone = soxPlayTone False
-
--- Play a sequence of tones (non-blocking).
-playTones :: [Tone] -> IO ()
-playTones tones = void $ forkIO $ mapM_ playTone' tones
-
--- Play a sequence of tones N times (non-blocking).
-repeatTones :: Int -> [Tone] -> IO ()
-repeatTones n tones = playTones $ concat $ replicate n tones
-
-
--- Generate a sequence of same-duration tones from a duration and a list of frequencies.
-mkTones :: Ms -> [Hz] -> [Tone]
-mkTones t freqs = [(f,t) | f <- freqs]
-
-
--- Sound effects. These mostly play sound(s) asynchronously, returning immediately.
+-------------------------------------------------------------------------------
+-- sound effects. These should generally be asynchronous, returning immediately.
 
 gameStartSound = void $ forkIO $ do
   let d = 0.12
@@ -1008,21 +948,23 @@ printCrashSoundVolumes = do
   putStr $ unlines $ reverse $ [printf "%5.f  %4.1f " s v ++ replicate (round $ v * 10) '*' | (s,v) <- vols]
   where vols = [(s, crashSoundVolume s) | s <- [0,5..60::Speed]]
 
-highScoreSound = soxPlay False [".1 sine 800 sine 800 delay 0 +.2"]
+inGameHighScoreSound = soxPlay False [".1 sine 800 sine 800 delay 0 +.2"]
 
-gameEndHighScoreSound = 
-  soxPlay False [".05 sine 400 sine 500 sine 600 sine 800 sine 800 delay "++delay++" +.1 +.1 +.1 +.2"] 
-  where delay = show $ restartdelaysecs / 2
+endGameHighScoreSound = 
+  soxPlay False [
+    ".05 sine 400 sine 500 sine 600 sine 800 sine 800"
+    ,"delay", overalldelay
+    ,"+.1 +.1 +.1 +.2"
+    ] 
+  where 
+    overalldelay = show $ restartdelaysecs / 2
 
 victorySound = do
-  playTone (200,100)
-  playTone (300,100)
-  playTone (400,100)
+  soxPlay False ["0.1 sine 200 sine 300 sine 400"] 
   threadDelay 160000
-  playTone (200,1500)
-  playTone (300,1500)
-  playTone (400,1500)
+  soxPlay False ["1.5 sine 200 sine 300 sine 400"] 
 
--- soxPlay False [".3","sine","200-100"]
--- soxPlay False [".8","sine","300-1"]
+quitSound = soxPlay False [".3","sine","200-100"]
+
+dropSound = soxPlay False [".8","sine","300-1"]
 
