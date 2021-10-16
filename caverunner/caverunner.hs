@@ -150,9 +150,9 @@ defcavenum  = 1
 defmaxspeed = 15
 cavelookahead = 3
 
-cavespeedinit  = 1     -- initial cave vertical speed (player's speed within the cave, really)
+cavespeedinit  = 1      -- nominal initial cave scroll speed (= player's speed within the cave)
 cavespeedaccel = 1.008  -- multiply speed by this much each game tick (gravity)
-cavespeedbrake = 1     -- multiply speed by this much each player movement (autobraking)
+cavespeedbrake = 1      -- multiply speed by this much each player movement (autobraking)
 
 (playerymin, playerymax) = (0.4, 0.4)  -- player bounds relative to screen height, different bounds enables speed panning
 
@@ -247,15 +247,17 @@ newGameState firstgame stats w h cavenum maxspeed hs = GameState {
   ,cavelines       = []
   ,cavewidth       = cavewidthinit
   ,cavecenter      = half w
-  ,cavespeed       = fromIntegral maxspeed / 6 -- cavespeedinit
-  ,cavespeedmin    = cavespeedinit * 2
+  ,cavespeed       = initspeed
+  ,cavespeedmin    = initspeed
   ,cavespeedmax    = fromIntegral maxspeed
-  ,cavetimer       = newCaveTimer cavespeedinit
+  ,cavetimer       = newCaveTimer initspeed
   ,speedpan        = 0
   ,playery         = playerYMin h
   ,playerx         = half w
   ,playerchar      = 'V'
   }
+  where
+    initspeed = fromIntegral maxspeed / 6
 
 -- save files, separated for robustness
 
@@ -958,7 +960,7 @@ gameStartSound = void $ forkIO $ do
 
 depthSound depth = do
   let v = 0.3
-  -- soxPlay False [".15", "sine", show $ 100 + depth, "vol", show v]
+  soxPlay False [".15", "sine", show $ 100 + depth, "vol", show v]
   soxPlay False [".15", "sine", show $ 1000 - depth, "vol", show $ v/3]
 
 -- trying to mimic a variable constant hiss with short sounds - too fragile
@@ -1010,7 +1012,9 @@ printCrashSoundVolumes = do
 
 highScoreSound = soxPlay False [".1 sine 800 sine 800 delay 0 +.2"]
 
-gameEndHighScoreSound = soxPlay False [".05 sine 400 sine 500 sine 600 sine 800 sine 800 delay "++delay++" +.1 +.1 +.1 +.2"] where delay = show $ restartdelaysecs / 2
+gameEndHighScoreSound = 
+  soxPlay False [".05 sine 400 sine 500 sine 600 sine 800 sine 800 delay "++delay++" +.1 +.1 +.1 +.2"] 
+  where delay = show $ restartdelaysecs / 2
 
 victorySound = do
   playTone (200,100)
