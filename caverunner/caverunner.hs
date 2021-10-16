@@ -906,7 +906,7 @@ soxPlay synchronous args = runProcessSilent synchronous $
   -- traceShowId $
   "sox -V0 -qnd synth " ++ unwords (if null args then ["1"] else args)
 
--- Arguments to follow sox's `synth` command, such as ["1","sine","200"] (a 1 second 200hz sine wave).
+-- Arguments to follow sox's `synth` command, such as ["1","sin","200"] (a 1 second 200hz sine wave).
 -- Should be one or more `synth` arguments, optionally followed by any other sox arguments,
 -- which allows complex sounds, chords and note sequences to be generated.
 type SynthArgs = [String]
@@ -915,18 +915,23 @@ type SynthArgs = [String]
 -- sound effects. These should generally be asynchronous, returning immediately.
 
 gameStartSound = void $ forkIO $ do
-  let d = 0.12
-      v = 0.7
-  soxPlay False [show d,"sine","400-100","vol",show v]
-  threadDelay $ round $ d * 1000000
-  soxPlay False [show d,"sine","400-100","vol",show v]
-  threadDelay $ round $ d * 1000000
-  soxPlay False [".5","sine","400-100","vol",show v]
+  let
+    short = 0.12
+    long  = 0.5
+    v     = 0.7
+  soxPlay False [
+               show short,"sin 400-100 vol",show v
+    ,": synth",show short,"sin 400-100 vol",show v
+    ,": synth",show long ,"sin 400-100 vol",show v
+    ]
 
 depthSound depth = do
   let v = 0.3
-  soxPlay False [".15", "sine", show $ 100 + depth, "vol", show v]
-  soxPlay False [".15", "sine", show $ 1000 - depth, "vol", show $ v/3]
+  soxPlay False [".15", 
+    "sin", show $ 100 + depth,
+    "sin", show $ 1000 - depth, 
+    "vol", show v
+    ]
 
 -- trying to mimic a variable constant hiss with short sounds - too fragile
 -- speedSound speed = do
@@ -959,15 +964,13 @@ closeShaveSound distance = do
     ]
 
 crashSound speed = do
-  -- soxPlay False [l, "pinknoise",  "fade", "l", "0", "-0", l, "vol", v, "vol .2"]
-  soxPlay False [d, "brownnoise", "fade", "l", "0", "-0", d, "vol 1"]
-  soxPlay False [d, "brownnoise", "fade", "l", "0", "-0", d, "vol", v]
+  soxPlay False [show d, "brownnoise", "fade", "l", "0", "-0", show d, "vol", show v]
   where
     speed' = min 60 $ 30 + speed / 2
-    d = show $ speed' / 6
-    v = show $ crashSoundVolume speed'
+    d = speed' / 6
+    v = crashSoundVolume speed'
 
-crashSoundVolume s = s / 25
+crashSoundVolume s = s / 10
 
 printCrashSoundVolumes = do
   putStrLn "        volume"
@@ -975,11 +978,11 @@ printCrashSoundVolumes = do
   putStr $ unlines $ reverse $ [printf "%5.f  %4.1f " s v ++ replicate (round $ v * 10) '*' | (s,v) <- vols]
   where vols = [(s, crashSoundVolume s) | s <- [0,5..60::Speed]]
 
-inGameHighScoreSound = soxPlay False [".1 sine 800 sine 800 delay 0 +.2"]
+inGameHighScoreSound = soxPlay False [".1 sin 800 sin 800 delay 0 +.2"]
 
 endGameHighScoreSound =
   soxPlay False [
-    ".05 sine 400 sine 500 sine 600 sine 800 sine 800"
+    ".05 sin 400 sin 500 sin 600 sin 800 sin 800"
     ,"delay", overalldelay
     ,"+.1 +.1 +.1 +.2"
     ]
@@ -987,11 +990,12 @@ endGameHighScoreSound =
     overalldelay = show $ restartdelaysecs / 2
 
 victorySound = do
-  soxPlay False ["0.1 sine 200 sine 300 sine 400"]
-  threadDelay 160000
-  soxPlay False ["1.5 sine 200 sine 300 sine 400"]
+  soxPlay False [
+             "0.06 sin 200 sin 300 sin 400 remix -"
+    ,": synth 2 sin 200 sin 300 sin 400 remix - delay .06 fade h 0 -0 .5"
+    ]
 
-dropSound = soxPlay False [".8","sine","300-1"]
+dropSound = soxPlay False [".8","sin","300-1"]
 
 -- synchronous, so it can play before app exits
-quitSound = soxPlay True [".3","sine","200-100"]
+quitSound = soxPlay True [".3","sin","200-100"]

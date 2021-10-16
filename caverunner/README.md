@@ -52,7 +52,6 @@ but couldn't easily get user input.
 
 ## Roadmap/Wishlist
 
-- use more efficient sox commands
 - winning grants speed-based score bonus
 - remember crash sites
 - cave-specific colours ?
