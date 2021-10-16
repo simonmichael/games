@@ -153,7 +153,7 @@ cavewidthdurations = [ -- how long should the various cave widths last ?
 
 defcavenum  = 1
 defmaxspeed = 15
-cavelookahead = 3
+cavelookahead = 1
 
 cavespeedinit  = 1      -- nominal initial cave scroll speed (= player's speed within the cave)
 cavespeedaccel = 1.008  -- multiply speed by this much each game tick (gravity)
