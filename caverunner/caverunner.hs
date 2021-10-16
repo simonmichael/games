@@ -397,7 +397,7 @@ newGame firstgame stats gameh cavenum maxspeed hs =
 
 -- Before calling step, do updates that should happen on every tick no matter what.
 step' g@GameState{..} Tick = step g' Tick
-  where 
+  where
     g' = g{
        gtick=gtick+1
       ,showhelp=showhelp && not (timeToHideHelp g)
@@ -714,10 +714,10 @@ err = errorWithoutStackTrace
 -- Run a shell command, either synchronously or in a background process,
 -- ignoring any output, errors or exceptions. ("Silent" here does not mean sound.)
 runProcessSilent :: Bool -> String -> IO ()
-runProcessSilent synchronous = 
+runProcessSilent synchronous =
   silenceExceptions .
   (if synchronous then void else void . forkIO) . void . runProcess .
-  silenceOutput . 
+  silenceOutput .
   shell
 
 silenceExceptions :: IO () -> IO ()
@@ -947,19 +947,19 @@ printCrashSoundVolumes = do
 
 inGameHighScoreSound = soxPlay False [".1 sine 800 sine 800 delay 0 +.2"]
 
-endGameHighScoreSound = 
+endGameHighScoreSound =
   soxPlay False [
     ".05 sine 400 sine 500 sine 600 sine 800 sine 800"
     ,"delay", overalldelay
     ,"+.1 +.1 +.1 +.2"
-    ] 
-  where 
+    ]
+  where
     overalldelay = show $ restartdelaysecs / 2
 
 victorySound = do
-  soxPlay False ["0.1 sine 200 sine 300 sine 400"] 
+  soxPlay False ["0.1 sine 200 sine 300 sine 400"]
   threadDelay 160000
-  soxPlay False ["1.5 sine 200 sine 300 sine 400"] 
+  soxPlay False ["1.5 sine 200 sine 300 sine 400"]
 
 quitSound = soxPlay False [".3","sine","200-100"]
 
