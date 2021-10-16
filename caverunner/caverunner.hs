@@ -24,6 +24,7 @@
 
 {-# OPTIONS_GHC -Wno-missing-signatures -Wno-unused-imports #-}
 {-# LANGUAGE MultiWayIf, NamedFieldPuns, RecordWildCards, ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns #-}
 
 import Control.Applicative
 import Control.Concurrent
@@ -697,13 +698,9 @@ exitWithUsage sstate sscores = do
   putStr $ usage termsize msox sstate sscores
   exitSuccess
 
--- XXX not working
-displaySizeStrSafe = (do
-  (w,h) <- displaySize 
-  return $ show w++"x"++show h
-  )
-  `catch` \(_::SomeException) -> 
-     return "unknown"
+displaySizeStrSafe = handle (\(_::ErrorCall) -> return "unknown") $ do
+  (w,h) <- displaySize
+  return $! show w++"x"++show h
 
 -- Convert seconds to game ticks based on global frame rate.
 secsToTicks :: Float -> Integer
