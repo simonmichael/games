@@ -76,34 +76,35 @@ usage termsize msoxpath sstate@SavedState{..} sscores = banner ++ unlines [
   ,"caverunner --help|-h                     # show this help"
   ,""
   ,"CAVE selects a different cave, from 1 to <highest completed + "++show cavelookahead++">."
-  ,unlockedCavesMessage sstate
-  ,""
-  ,"SPEED sets a different maximum dive speed, from 1 to 60."
-  ,currentCaveMessage sstate sscores
+  ,"SPEED sets a different maximum dive speed, from 1 to 60 (default: 15)."
   ,""
   ,"Your terminal size is "++termsize++". (80x25 terminals are best for competition play.)"
+  ,soundMessage msoxpath
+  ,progressMessage sstate sscores
   ]
-  ++ case msoxpath of
-    Nothing -> unlines [
-      "To enable sound effects, install sox in PATH:"
-      ,"apt install sox / brew install sox / choco install sox.portable / etc."
-      ]
-    Just soxpath -> unlines [
-      "Sound effects are enabled, using " ++ soxpath ++ ". --no-sound to disable."
-      ]
+
+soundMessage Nothing = unlines [
+   "To enable sound effects, install sox in PATH:"
+  ,"apt install sox, brew install sox, choco install sox.portable, or similar."
+  ]
+soundMessage (Just soxpath) = unlines [
+  "Sound is enabled, using " ++ soxpath ++ ". --no-sound to disable."
+  ]
+      
+progressMessage sstate@SavedState{..} sscores = unlines [
+   unlockedCavesMessage sstate
+  ,"Currently running cave "++show currentcave
+   ++" at speed "++show currentspeed
+   ++ "; your best score is " ++ show highscore ++ "."
+  ]
+  where
+    highscore = fromMaybe 0 $ M.lookup (currentcave, currentspeed) sscores
 
 unlockedCavesMessage SavedState{..} =
   "You have completed " ++ cavecompleted ++ ", and can reach caves 1 to " ++ show maxcave ++ "."
   where
     cavecompleted = if highcave==0 then "no caves" else "cave "++show highcave
     maxcave = highcave + cavelookahead
-
-currentCaveMessage SavedState{..} sscores = 
-  "Currently running cave "++show currentcave
-  ++" at speed "++show currentspeed
-  ++ "; your best score is " ++ show highscore ++ "."
-  where
-    highscore = fromMaybe 0 $ M.lookup (currentcave, currentspeed) sscores
 
 -------------------------------------------------------------------------------
 -- tweakable parameters
@@ -314,10 +315,10 @@ main = do
           caveerr a = err $ "CAVE should be a natural number (received "++a++"), see --help)"
           checkcave c
             | c <= highcave + cavelookahead = c
-            | otherwise = err $ unlines [
+            | otherwise = err $ init $ unlines [
                  ""
+                ,"To reach cave "++show c ++ ", you must complete at least cave "++ show (c-cavelookahead) ++ "."
                 ,unlockedCavesMessage sstate
-                ,"You must complete at least cave "++ show (c-cavelookahead) ++ " to reach cave "++show c ++ "."
                 ]
           speederr a = err $ "SPEED should be 1-60 (received "++a++"), see --help)"
           checkspeed s = if s >= 1 && s <= 60 then s else speederr $ show s
@@ -400,10 +401,7 @@ playGames firstgame showstats cavenum maxspeed (sstate@SavedState{..},sstatet) (
   then 
     playGames False showstats cavenum' maxspeed (sstate',sstatet') (sscores',sscorest')
   else do
-    putStr $ unlines [
-       unlockedCavesMessage sstate'
-      ,currentCaveMessage sstate' sscores'
-      ]
+    putStr $ progressMessage sstate' sscores'
     when soundEnabled quitSound
 
 -- Initialise a new game (a cave run).
