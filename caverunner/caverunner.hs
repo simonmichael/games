@@ -46,7 +46,7 @@ import System.IO
 import System.IO.Unsafe (unsafePerformIO)
 import System.Process.Typed
 import Terminal.Game
-import Text.Pretty.Simple (pPrint)
+import Text.Pretty.Simple (pPrint, pShow)
 import Text.Printf
 
 -------------------------------------------------------------------------------
@@ -368,22 +368,11 @@ playGames firstgame showstats cavenum maxspeed (sstate@SavedState{..},sstatet) (
     highscore = fromMaybe 0 $ M.lookup (cavenum, maxspeed) sscores
     game = newGame firstgame showstats screenh cavenum maxspeed highscore
 
-  g@GameState{score,exit} <- Terminal.Game.playGameS game  -- run one game. Will fail if terminal is too small.
+  -- run one game. Will exit if terminal is too small.
+  g@GameState{score,exit} <- Terminal.Game.playGameS game
+  -- game started, and ended by crashing, reaching cave end, or quitting with q. (Ctrl-c is not caught here.)
 
-  -- if the game started successfully, remember the cave and speed
-  d <- getSaveDir
-  esaved <- saveState (sstate,sstatet)
-  sstatet' <- case esaved of
-    Left msg -> hPutStrLn stderr msg >> return sstatet
-    Right t  -> return t
-
-  -- if there's a new high score, remember it
-  let sscores' = M.insert (cavenum, maxspeed) (max score highscore) sscores
-  esaved <- saveScores (sscores',sscorest)
-  sscorest' <- case esaved of
-    Left msg -> hPutStrLn stderr msg >> return sscorest
-    Right t  -> return t
-
+  -- if the end was reached, advance to next cave and maybe unlock cave(s)
   let
     (cavenum', highcave')
       | playerAtEnd g = (cavenum+1, max highcave cavenum)
@@ -393,13 +382,31 @@ playGames firstgame showstats cavenum maxspeed (sstate@SavedState{..},sstatet) (
       ,currentspeed = maxspeed
       ,highcave     = highcave'
       }
-  if exit
-  then do
-    putStrLn $ unlockedCavesMessage sstate
-    putStrLn $ currentCaveMessage sstate sscores
-    quitSound
-  else
+
+  -- save that state
+  d <- getSaveDir
+  esaved <- saveState (sstate',sstatet)
+  sstatet' <- case esaved of
+    Left msg -> hPutStrLn stderr msg >> return sstatet
+    Right t  -> return t
+
+  -- save any new high score
+  let sscores' = M.insert (cavenum, maxspeed) (max score highscore) sscores
+  esaved <- saveScores (sscores',sscorest)
+  sscorest' <- case esaved of
+    Left msg -> hPutStrLn stderr msg >> return sscorest
+    Right t  -> return t
+
+  -- play again, or exit the app
+  if not exit
+  then 
     playGames False showstats cavenum' maxspeed (sstate',sstatet') (sscores',sscorest')
+  else do
+    putStrLn $ unlines [
+       unlockedCavesMessage sstate
+      ,currentCaveMessage sstate sscores
+      ]
+    quitSound
 
 -- Initialise a new game (a cave run).
 newGame :: Bool -> Bool -> Height -> CaveNum -> MaxSpeed -> Score -> Game GameState
