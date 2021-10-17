@@ -196,8 +196,12 @@ data Scene =
   | Won
   deriving (Show,Eq)
 
+-- In-memory state for 
+-- 1. a single cave run (one execution of ansi-terminal-game's playGameS)
+-- 2. a player's game (one or more cave runs until game over (crash) or program exit)
+-- 3. the app (one or more games until program exit)
 data GameState = GameState {
-  -- options
+  -- read-only app state
    stats           :: Bool       -- whether to show statistics
   -- current app state
   ,firstgame       :: Bool       -- is this the first game since app start ? (affects help)
@@ -214,6 +218,7 @@ data GameState = GameState {
   ,gtick           :: Integer    -- current game tick
   ,cavenum         :: CaveNum
   ,highscore       :: Score      -- high score for the current cave and max speed
+  ,highscorecopy   :: Score      -- a copy to help detect new high score during cave end scene
   ,score           :: Score      -- current score in this game
   ,randomgen       :: StdGen
   ,cavesteps       :: Int        -- how many cave lines have been generated since game start (should be Integer but I can't be bothered)
@@ -246,6 +251,7 @@ newGameState firstgame stats w h cavenum maxspeed hs = GameState {
   ,gtick           = 0
   ,cavenum         = cavenum
   ,highscore       = hs
+  ,highscorecopy   = hs
   ,score           = 0
   ,randomgen       = mkStdGen cavenum
   ,cavesteps       = 0
@@ -901,7 +907,8 @@ drawGameOver g@GameState{..} w h =
         ,printf "You reached depth %d.%s" (playerDepth g) hs
         ,"Press a key to relaunch.."
         ]
-    hs = if highscore==score then " High score!" else ""
+    hs | score > highscorecopy = " New high score!"
+       | otherwise             = ""
     xstart str = 2 + half innerw - half (fromIntegral $ length str) where innerw = w - 2
     (y1, x1) = (3, xstart l1)
     (y2, x2) = (4, xstart l2)
