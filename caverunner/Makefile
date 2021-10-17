@@ -30,3 +30,7 @@ loop:
 		-e "tell application \"Terminal\" to activate"
 
 FORCE:
+
+loc:
+	cloc $(PROG)
+
