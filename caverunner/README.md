@@ -52,10 +52,30 @@ but couldn't easily get user input.
 
 ## Roadmap/Wishlist
 
-- winning grants speed-based score bonus
+- persistence
+  - more reliable data loss prevention
+    - read and try to merge changes before writing
+    - onscreen alert on conflict ?
+    - save under different name when there's a conflict ?
+    - don't allow running two instances at once ?
+    - allow only one instance to have a lock on the save files ?
+    - append-only save files ?
+    - improve-only save files - only write better progress/scores ?
+  - selectable named saves
+  - version-declaring/upgradable save files ?
+  - group scores by speed ?
+  - more readable scores format ?
+    - can pretty-printed be read ?
+  - less readable state format ?
+  - per-speed cave states ?
+    - what is primary, cave or speed ?
+    - how will fixed-speed and future variable-speed play coexist ?
+- improve cave end messages
+- speed-based score bonus at cave end
 - remember crash sites
 - cave-specific colours ?
 - light/dark schemes ? cf Terminal.app silver aerogel
+- 3 lives ?
 - attract mode / high score table
 - better run/install docs
 - show actual frame rate
@@ -73,9 +93,7 @@ but couldn't easily get user input.
 - more varied caves and flight mechanics
 - high score sharing / server
 - document vs code+hls setup, dev workflows
-- robust persistence
-  - do something smarter on save files write conflict ? onscreen alert ?
-- better sound
+- sound
   - don't clip end of sounds, or muffle sounds < 100ms
   - thruster sound
   - quit sound
