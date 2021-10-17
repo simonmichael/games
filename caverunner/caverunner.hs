@@ -266,7 +266,7 @@ newGameState firstgame stats w h cavenum maxspeed hs = GameState {
 
 -- save files, separated for robustness
 
--- miscellaneous saved state
+-- miscellaneous persistent state
 
 data SavedState = SavedState {
    currentcave  :: CaveNum     -- the cave most recently played
@@ -702,6 +702,42 @@ load filename = do
     t <- getCurrentTime
     return $ Just (v, Just t)
 
+-- A more careful version of save that tries to minimise writes and avoid data loss:
+-- 1. if the save file exists and already contains the same value, does nothing
+--    and returns Right Nothing.
+-- 2. if the save file was modified since we last loaded it, writes a new save
+--    file (just one alternate copy, with .new extension), and returns 
+--    Left <warning message>. To detect this case, the last load time
+--    (from the previous load or maybeSave call) should be provided.
+-- 3. otherwise writes the file and returns Right <current time>, which should
+--    be considered the new last load time.
+maybeSave :: (Read a, Show a, Eq a) => FilePath -> (a, Maybe UTCTime) -> IO (Either String (Maybe UTCTime))
+maybeSave filename (val,mlastloadtime)  = do
+  dir      <- getSaveDir
+  emodtime <- try $ getModificationTime $ dir </> filename :: IO (Either IOError UTCTime)
+  mcurrent <- load filename
+  case (mcurrent, mlastloadtime, emodtime) of
+    (Just (oldval, _), _, _) | oldval==val ->
+      -- value unchanged: do nothing  -- XXX could update last load time ?
+      return $ Right Nothing
+
+    (Just _, Just loadtime, Right modtime) | modtime > loadtime -> do
+      -- write conflict: warn and save elsewhere
+      let filename' = filename <.> "new"
+      save filename' val
+      now <- getCurrentTime
+      return $ Left $
+        "warning: " ++ filename ++ " file modified since last read, saved "
+        ++ filename' ++ " instead for manual merge"
+        -- XXX debugging:
+        ++ "\n" ++ dir </> filename ++ "  " ++ show modtime
+        ++ "\n" ++ dir </> filename' ++ "  " ++ show now
+
+    _ -> do
+      -- otherwise: save and update last load time
+      save filename val
+      Right . Just <$> getCurrentTime
+
 -- Write a value to the named save file, using show,
 -- creating the save directory if it does not exist.
 -- Any previous value in the save file will be overwritten.
@@ -711,25 +747,6 @@ save filename val = do
   createDirectoryIfMissing True d
   let f = d </> filename
   writeFile f $ show val
-
--- Like save, but more careful: avoids writing
--- 1. unnecessarily (the save file exists and already contains the same value), or
--- 2. unsafely (the save file has been written to since we last read it).
--- To detect case 2, the last read time (obtained from load) should be provided.
--- Returns Left <warning message> in case 2, Right Nothing in case 1,
--- or Right <current time> on successful write.
-maybeSave :: (Read a, Show a, Eq a) => FilePath -> (a, Maybe UTCTime) -> IO (Either String (Maybe UTCTime))
-maybeSave filename (val,mloadtime)  = do
-  d <- getSaveDir
-  let f = d </> filename
-  modtime <- getModificationTime f
-  mvt <- load filename
-  now <- getCurrentTime
-  case (mvt, mloadtime) of
-    (Just (oldval, _), _) | oldval==val -> return $ Right Nothing
-    (Just _, Just loadtime) | modtime > loadtime -> 
-      return $ Left $ "warning: " ++ filename ++ " file was modified since last read, could not write"
-    _ -> save filename val >> return (Right $ Just now)
 
 -------------------------------------------------------------------------------
 -- utilities
