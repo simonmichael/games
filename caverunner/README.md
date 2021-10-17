@@ -54,22 +54,20 @@ but couldn't easily get user input.
 
 - persistence
   - more reliable data loss prevention
-    - read and try to merge changes before writing
+    - test maybeSave, reproduce/fix false conflicts
+    - try to merge data instead of overwriting ?
+      - improve-only - only save better progress/scores ?
+      - append-only ?
     - onscreen alert on conflict ?
-    - save under different name when there's a conflict ?
-    - don't allow running two instances at once ?
-    - allow only one instance to have a lock on the save files ?
-    - append-only save files ?
-    - improve-only save files - only write better progress/scores ?
-  - selectable named saves
   - version-declaring/upgradable save files ?
+  - multiple named saves ?
   - group scores by speed ?
+  - per-speed cave states ?
+    - what is primary, cave or speed ?
+    - how will fixed-speed and future variable-speed scores/progress coexist ?
   - more readable scores format ?
     - can pretty-printed be read ?
   - less readable state format ?
-  - per-speed cave states ?
-    - what is primary, cave or speed ?
-    - how will fixed-speed and future variable-speed play coexist ?
 - improve cave end messages
 - speed-based score bonus at cave end
 - remember crash sites
