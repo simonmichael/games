@@ -885,22 +885,27 @@ drawStats g@GameState{..} =
 drawGameOver g@GameState{..} w h =
   box w h '-'
   & (2,2) % box (w-2) (h-2) ' '
-  & (txty,txtx) % stringPlane txt
-  & (txty+1,txtx - half (length txt2 - length txt - 1)) % stringPlane txt2
-  & (if isExpired restarttimer then (txty+2,txtx-7) % stringPlane "press a key to relaunch" else id)
+  & (y1,x1) % stringPlane l1
+  & (y2,x2) % stringPlane l2
+  & (if isExpired restarttimer then (y3,x3) % stringPlane l3 else id)
   where
-    innerw = w - 2
-    innerh = h - 2
-    txt = "GAME OVER"
-    txt2 =
-      if playerAtEnd g
-      then printf "you completed cave %d. Nice flying!" cavenum
-      else printf "you reached depth %d." (playerDepth g)
-      ++ if highscore==score then " High score!" else ""
-    txtw = fromIntegral $ length txt
-    txth = 2
-    txtx = 2 + half innerw - half txtw
-    txty = 3
+    [l1,l2,l3]
+      -- printf makes runtime errors, be careful
+      | playerAtEnd g = [
+         printf "CAVE %d COMPLETE" cavenum
+        ,printf "Nice flying!%s" hs
+        ,"Press a key to advance.."
+        ]
+      | otherwise = [
+         "GAME OVER"
+        ,printf "You reached depth %d.%s" (playerDepth g) hs
+        ,"Press a key to relaunch.."
+        ]
+    hs = if highscore==score then " High score!" else ""
+    xstart str = 2 + half innerw - half (fromIntegral $ length str) where innerw = w - 2
+    (y1, x1) = (3, xstart l1)
+    (y2, x2) = (4, xstart l2)
+    (y3, x3) = (5, xstart l3)
 
 -------------------------------------------------------------------------------
 -- sound helpers
