@@ -404,7 +404,7 @@ playGames firstgame showstats cavenum maxspeed (sstate@SavedState{..},sstatet) (
        unlockedCavesMessage sstate'
       ,currentCaveMessage sstate' sscores'
       ]
-    quitSound
+    when soundEnabled quitSound
 
 -- Initialise a new game (a cave run).
 newGame :: Bool -> Bool -> Height -> CaveNum -> MaxSpeed -> Score -> Game GameState
