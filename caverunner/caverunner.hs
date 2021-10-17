@@ -372,7 +372,7 @@ playGames firstgame showstats cavenum maxspeed (sstate@SavedState{..},sstatet) (
   g@GameState{score,exit} <- Terminal.Game.playGameS game
   -- game started, and ended by crashing, reaching cave end, or quitting with q. (Ctrl-c is not caught here.)
 
-  -- if the end was reached, advance to next cave and maybe unlock cave(s)
+  -- update persistent state (if the end was reached, advance to next cave and maybe unlock cave(s))
   let
     (cavenum', highcave')
       | playerAtEnd g = (cavenum+1, max highcave cavenum)
@@ -382,15 +382,13 @@ playGames firstgame showstats cavenum maxspeed (sstate@SavedState{..},sstatet) (
       ,currentspeed = maxspeed
       ,highcave     = highcave'
       }
-
   -- save that state
-  d <- getSaveDir
   esaved <- saveState (sstate',sstatet)
   sstatet' <- case esaved of
     Left msg -> hPutStrLn stderr msg >> return sstatet
     Right t  -> return t
 
-  -- save any new high score
+  -- update and save any new high score
   let sscores' = M.insert (cavenum, maxspeed) (max score highscore) sscores
   esaved <- saveScores (sscores',sscorest)
   sscorest' <- case esaved of
@@ -402,9 +400,9 @@ playGames firstgame showstats cavenum maxspeed (sstate@SavedState{..},sstatet) (
   then 
     playGames False showstats cavenum' maxspeed (sstate',sstatet') (sscores',sscorest')
   else do
-    putStrLn $ unlines [
-       unlockedCavesMessage sstate
-      ,currentCaveMessage sstate sscores
+    putStr $ unlines [
+       unlockedCavesMessage sstate'
+      ,currentCaveMessage sstate' sscores'
       ]
     quitSound
 
