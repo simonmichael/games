@@ -49,16 +49,44 @@ shows about the max speed in a 80x25 Terminal.app window on a m1 macbook.
 went faster ([cave1.anim.gif](old/cave1.anim.gif)),
 but couldn't easily get user input.
 
+### Some dev decisions
+
+- The style is inspired by 70s basic computer games and 80s home computer magazine games.
+- The game is a terminal game, to limit cost and scope and increase chance of shipping, and to invoke the creativity and fun of early games.
+- The programming language is Haskell, because it's powerful, maintainable, and portable, and has untapped potential for game dev.
+
+Installability, usability
+
+- The game is implemented and shipped as a single easy-to-run source file, for simple setup, reading and hacking.
+- The game is cross platform, and must work on at least the three big platforms.
+- Installing/running should *just work* to the greatest extent possible.
+- stack's script support is used to achieve this (a `stack` executable is the only requirement). Binary/web/ssh versions could be explored later.
+- Pointers are provided for people who want to run the game without installing stack (using cabal).
+- The game does not require a network connection to play (once installed).
+
+Gameplay
+
+- The game should be quick and fun to play.
+- The mechanics should (initially) be as simple as possible while still being fun.
+- Levels, scores, progress etc. should be stable and comparable between players.
+
+Sound
+
+- The game should use sound when possible, without complicating installation.
+- Command-line `sox` is used, as the easiest cross-platform to achieve this. OpenAL will be explored later.
+
+Persistence
+
+- Persistent state is part of the gameplay and must be reliable.
+- Persistent state is saved in separate files (progress, scores, crashes..) for robustness and readability.
+- Persistent state data loss (eg from multiple instances) is avoided by not overwriting a more-recently-modified file.
+- In case of write conflict, the new state is written in a separate file (one copy only) for manual resolution. Auto-merging will be implemented later.
+- Old saved state should remain usable/migratable even as the game evolves, where possible.
+
 
 ## Roadmap/Wishlist
 
 - persistence
-  - more reliable data loss prevention
-    - test maybeSave, reproduce/fix false conflicts
-    - try to merge data instead of overwriting ?
-      - improve-only - only save better progress/scores ?
-      - append-only ?
-    - onscreen alert on conflict ?
   - version-declaring/upgradable save files ?
   - multiple named saves ?
   - group scores by speed ?
@@ -68,8 +96,8 @@ but couldn't easily get user input.
   - more readable scores format ?
     - can pretty-printed be read ?
   - less readable state format ?
-- improve cave end messages
-- speed-based score bonus at cave end
+  - on conflict, merge (only save better progress/scores) instead of writing elsewhere ?
+- speed-based score bonus at cave end ?
 - remember crash sites
 - cave-specific colours ?
 - light/dark schemes ? cf Terminal.app silver aerogel
