@@ -32,7 +32,7 @@ Installable/playable game,
 occasional development/maintenance,
 help welcome,
 last notable updates 2021,
-developer-hours ~80,
+developer-hours ~100,
 discussion/support [#haskell-game on matrix](https://matrix.to/#/#haskell-game:matrix.org) or [IRC](https://web.libera.chat/#haskell-game).
 
 ## Dev notes
@@ -49,11 +49,12 @@ shows about the max speed in a 80x25 Terminal.app window on a m1 macbook.
 went faster ([cave1.anim.gif](old/cave1.anim.gif)),
 but couldn't easily get user input.
 
-### Some dev decisions
+### Decisions/goals
 
 - The style is inspired by 70s basic computer games and 80s home computer magazine games.
-- The game is a terminal game, to limit cost and scope and increase chance of shipping, and to invoke the creativity and fun of early games.
-- The programming language is Haskell, because it's powerful, maintainable, and portable, and has untapped potential for game dev.
+- The game is a terminal game, to limit cost and scope, increase chance of shipping, and invoke the creativity and fun of early games.
+- The programming language is Haskell, because it's powerful, maintainable, and portable, 
+  and has untapped potential for game dev and a small but enthusiastic game dev scene.
 
 Installability, usability
 
@@ -72,15 +73,15 @@ Gameplay
 
 Sound
 
-- The game should use sound when possible, without complicating installation.
-- Command-line `sox` is used, as the easiest cross-platform to achieve this. OpenAL will be explored later.
+- The game should use sound if possible, without complicating installation.
+- Command-line `sox` is used, as the easiest cross-platform way to achieve this. OpenAL will be explored later.
 
 Persistence
 
 - Persistent state is part of the gameplay and must be reliable.
 - Persistent state is saved in separate files (progress, scores, crashes..) for robustness and readability.
 - Persistent state data loss (eg from multiple instances) is avoided by not overwriting a more-recently-modified file.
-- In case of write conflict, the new state is written in a separate file (one copy only) for manual resolution. Auto-merging will be implemented later.
+- In case of write conflict, the new state is written in a separate file for manual resolution (one copy only). Auto-merging will be implemented later.
 - Old saved state should remain usable/migratable even as the game evolves, where possible.
 
 
