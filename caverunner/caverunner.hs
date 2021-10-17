@@ -61,9 +61,9 @@ banner = unlines [
   ,"\\___/\\__,_/ |___/\\___/_/   \\__,_/_/ /_/_/ /_/\\___/_/     "
   ]
 
-usage termsize msoxpath sstate@SavedState{..} sscores = banner ++ unlines [
+usage termsize msoxpath sstate@SavedState{..} sscores = (banner++) $ init $ unlines [
    "--------------------------------------------------------------------------------" -- 80
-  ,"caverunner "++version++" - a small terminal game by Simon Michael."
+  ,"caverunner "++version++" - a small terminal arcade game by Simon Michael."
   ,""
   ,"Thrillseeking drone pilots dive the solar system's caves, competing for glory!"
   ,"Each cave and speed has a high score. Reaching the bottom unlocks more caves."
@@ -83,13 +83,12 @@ usage termsize msoxpath sstate@SavedState{..} sscores = banner ++ unlines [
   ,progressMessage sstate sscores
   ]
 
-soundMessage Nothing = unlines [
+soundMessage Nothing = init $ unlines [
    "To enable sound effects, install sox in PATH:"
   ,"apt install sox, brew install sox, choco install sox.portable, or similar."
   ]
-soundMessage (Just soxpath) = unlines [
+soundMessage (Just soxpath) =
   "Sound is enabled, using " ++ soxpath ++ ". --no-sound to disable."
-  ]
       
 progressMessage sstate@SavedState{..} sscores = unlines [
    unlockedCavesMessage sstate
@@ -723,10 +722,10 @@ maybeSave filename (val,mlastloadtime)  = do
       save filename' val
       now <- getCurrentTime
       return $ Left $
-        "warning: " ++ filename ++ " file modified since last read, saved "
-        ++ filename' ++ " instead for manual merge"
+        "Warning: " ++ filename ++ " file modified since last read, saving "
+        ++ filename' ++ " instead for manual merge:"
         -- XXX debugging:
-        ++ "\n" ++ dir </> filename ++ "  " ++ show modtime
+        ++ "\n" ++ dir </> filename ++ "      " ++ show modtime
         ++ "\n" ++ dir </> filename' ++ "  " ++ show now
 
     _ -> do
