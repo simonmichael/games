@@ -1,5 +1,5 @@
 #!/usr/bin/env stack
-{- stack script --optimize --verbosity=warn --resolver=nightly-2021-10-12
+{- stack script --optimize --verbosity=warn --resolver=nightly-2021-10-19
   --ghc-options=-threaded
   --package ansi-terminal
   --package ansi-terminal-game
@@ -760,9 +760,9 @@ exitWithUsage sstate sscores = do
   putStr $ usage termsize msox sstate sscores
   exitSuccess
 
-displaySizeStrSafe = handle (\(_::ErrorCall) -> return "unknown") $ do
+displaySizeStrSafe = handle (\(_::ATGException) -> return "unknown") $ do
   (w,h) <- displaySize
-  return $! show w++"x"++show h
+  return $ show w++"x"++show h
 
 -- Convert seconds to game ticks based on global frame rate.
 secsToTicks :: Float -> Integer
