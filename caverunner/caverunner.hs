@@ -871,12 +871,12 @@ drawHelp GameState{..} =
 drawHighScore g@GameState{..} =
   stringPlane " high score " ||| (stringPlane (printf "%04d " highscore) & maybebold)
   where
-    maybebold = if gameOver g && highscore==score then (#bold) else id
+    maybebold = if gameOver g && highscore > highscorecopy then (#bold) else id
 
 drawScore GameState{..} =
   stringPlane " score " ||| (stringPlane (printf "%04d " score) & maybebold)
   where
-    maybebold = if score >= highscore then (#bold) else id
+    maybebold = if score > highscore then (#bold) else id
 
 drawSpeed g@GameState{..} = stringPlane " speed " ||| stringPlane (printf "%3.f " cavespeed)
 
