@@ -7,6 +7,7 @@ PACKAGES=\
   --package containers\
   --package directory\
   --package filepath\
+  --package pretty-show\
   --package pretty-simple\
   --package safe\
   --package time\

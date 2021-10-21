@@ -6,6 +6,7 @@
   --package containers
   --package directory
   --package filepath
+  --package pretty-show
   --package pretty-simple
   --package safe
   --package time
@@ -46,7 +47,8 @@ import System.IO
 import System.IO.Unsafe (unsafePerformIO)
 import System.Process.Typed
 import Terminal.Game
-import Text.Pretty.Simple (pPrint, pShow)
+import qualified Text.Show.Pretty as PrettyShow (ppShow, pPrint)
+import qualified Text.Pretty.Simple as PrettySimple (pShow, pShowNoColor, pPrint, pPrintNoColor)
 import Text.Printf
 
 -------------------------------------------------------------------------------
@@ -681,7 +683,30 @@ playerAtEnd g = case playerLine g of
 getSaveDir :: IO FilePath
 getSaveDir = getXdgDirectory XdgData progname
 
--- Try to read a value from the named save file, using read.
+-- -- Try to read a value from the named save file, using read.
+-- -- Exits with an error message if reading fails,
+-- -- returns Nothing if the file does not exist,
+-- -- or Just (value, <current time>) if successful.
+-- -- This time should be passed to maybeSave when next saving to this file,
+-- -- to help detect write conflicts and prevent data loss.
+-- -- (The time is wrapped in Maybe for ease of use, but will always be Just.)
+-- load :: (Read a, Show a, Eq a) => FilePath -> IO (Maybe (a, Maybe UTCTime))
+-- load filename = do
+--   d <- getSaveDir
+--   let f = d </> filename
+--   exists <- doesFileExist f
+--   if not exists
+--   then pure Nothing
+--   else do
+--     v <- readDef (err $ init $ unlines [
+--       "could not read " ++ f
+--       ,"Perhaps the format has changed ? Please move it out of the way and run again."
+--       ]) <$> readFile f
+--     t <- getCurrentTime
+--     return $ Just (v, Just t)
+
+-- Try to read a value from the named save file using read, but first remove
+-- any newlines, so this should also read human-readable prettified show output.
 -- Exits with an error message if reading fails,
 -- returns Nothing if the file does not exist,
 -- or Just (value, <current time>) if successful.
@@ -696,10 +721,12 @@ load filename = do
   if not exists
   then pure Nothing
   else do
-    v <- readDef (err $ init $ unlines [
-      "could not read " ++ f
-      ,"Perhaps the format has changed ? Please move it out of the way and run again."
-      ]) <$> readFile f
+    s <- filter (/='\n') <$> readFile f
+    let
+      v = readDef (err $ init $ unlines [
+           "could not read " ++ f
+          ,"Perhaps the format has changed ? Please move it out of the way and run again."
+          ]) s
     t <- getCurrentTime
     return $ Just (v, Just t)
 
@@ -739,18 +766,51 @@ maybeSave filename (val,mlastloadtime)  = do
       save filename val
       Right . Just <$> getCurrentTime
 
--- Write a value to the named save file, using show,
--- creating the save directory if it does not exist.
--- Any previous value in the save file will be overwritten.
+-- -- Write a value to the named save file, using show,
+-- -- creating the save directory if it does not exist.
+-- -- Any previous value in the save file will be overwritten.
+-- save :: (Read a, Show a, Eq a) => FilePath -> a -> IO ()
+-- save filename val = do
+--   d <- getSaveDir
+--   createDirectoryIfMissing True d
+--   let f = d </> filename
+--   writeFile f $ show val
+
+-- Write a value to the named save file, in with a human-readable
+-- prettified version of show, creating the save directory if it does
+-- not exist. Any previous value in the save file will be overwritten.
 save :: (Read a, Show a, Eq a) => FilePath -> a -> IO ()
 save filename val = do
   d <- getSaveDir
   createDirectoryIfMissing True d
   let f = d </> filename
-  writeFile f $ show val
+  writeFile f $ pshow val
+
 
 -------------------------------------------------------------------------------
 -- utilities
+
+-- pretty-show: can't print in colour and had some other drawback
+-- (couldn't print times, maybe fixed now ?) But it generates more
+-- compact and human-readable output than pretty-simple.
+
+pshow :: Show a => a -> String
+pshow = PrettyShow.ppShow
+
+pprint :: Show a => a -> IO ()
+pprint = PrettyShow.pPrint
+
+-- pshow :: Show a => a -> String
+-- pshow = T.unpack . PrettySimple.pShowNoColor
+
+-- pprint :: Show a => a -> IO ()
+-- pprint = PrettySimple.pPrintNoColor
+
+-- pshowc :: Show a => a -> String
+-- pshowc = T.unpack . PrettySimple.pShow
+
+pprintc :: Show a => a -> IO ()
+pprintc = PrettySimple.pPrint
 
 exitWithUsage sstate sscores = do
   clearScreen
