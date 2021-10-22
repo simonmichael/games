@@ -327,9 +327,9 @@ maybeSave filename loadfn (val, mlastloadtime) = do
   emodtime <- try $ getModificationTime $ dir </> filename :: IO (Either IOError UTCTime)
   mcurrent <- loadfn
   case (mcurrent, mlastloadtime, emodtime) of
-    -- (Just (oldval, _), _, _) | oldval==val ->
-    --   -- value unchanged: do nothing  -- XXX could update last load time ?
-    --   return $ Right Nothing
+    (Just (oldval, _), _, _) | oldval==val ->
+      -- value unchanged: do nothing  -- XXX could update last load time ?
+      return $ Right Nothing
 
     (Just _, Just loadtime, Right modtime) | modtime > loadtime -> do
       -- write conflict: warn and save elsewhere
