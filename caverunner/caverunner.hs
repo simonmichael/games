@@ -936,7 +936,7 @@ drawHighScore g@GameState{..} =
 drawScore GameState{..} =
   stringPlane " score " ||| (stringPlane (printf "%04d " score) & maybebold)
   where
-    maybebold = if score > highscore then (#bold) else id
+    maybebold = if score > highscorecopy then (#bold) else id
 
 drawSpeed g@GameState{..} = stringPlane " speed " ||| stringPlane (printf "%3.f " cavespeed)
 
