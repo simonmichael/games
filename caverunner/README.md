@@ -80,15 +80,19 @@ Persistence
 
 - Persistent state is part of the gameplay and must be reliable.
 - Persistent state is saved in separate files (progress, scores, crashes..) for robustness and readability.
-- Persistent state data loss (eg from multiple instances) is avoided by not overwriting a more-recently-modified file.
+- Data loss (eg from multiple instances writing state) is avoided by not overwriting a more-recently-modified file.
 - In case of write conflict, the new state is written in a separate file for manual resolution (one copy only). Auto-merging will be implemented later.
-- Old saved state should remain usable/migratable even as the game evolves, where possible.
+- State is serialised with pretty-show and modified read, for simplicity and easy reading/repair.
+- Old state file formats are read and automatically migrated to the latest format where possible.
+  - Currently, state files do not have an explicit version (format) marker, and all versions reuse the same filename. It tries newest formats first, and assumes first successful read is correct.
 
 
-## Roadmap/Wishlist
+### Roadmap/Wishlist
 
+- version numbers
+- readme/install doc updates
+- review release scope
 - persistence
-  - version-declaring/upgradable save files ?
   - multiple named saves ?
   - group scores by speed ?
   - per-speed cave states ?
