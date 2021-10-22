@@ -26,11 +26,15 @@
 
 {-# OPTIONS_GHC -Wno-missing-signatures -Wno-unused-imports #-}
 {-# LANGUAGE MultiWayIf, NamedFieldPuns, RecordWildCards, ScopedTypeVariables #-}
+-- {-# LANGUAGE RankNTypes #-}
+-- {-# LANGUAGE ExistentialQuantification #-}
+-- {-# LANGUAGE GADTs #-}
 
 import Control.Applicative
 import Control.Concurrent
 import Control.Exception
 import Control.Monad
+import Data.Bifunctor (first)
 import Data.Function (fix)
 import Data.List
 import qualified Data.Map as M
@@ -99,7 +103,7 @@ progressMessage sstate@SavedState{..} sscores = unlines [
    ++ "; your best score is " ++ show highscore ++ "."
   ]
   where
-    highscore = fromMaybe 0 $ M.lookup (currentcave, currentspeed) sscores
+    highscore = maybe 0 hscore $ hsLookup currentcave currentspeed sscores
 
 unlockedCavesMessage SavedState{..} =
   "You have completed " ++ cavecompleted ++ ", and can reach caves 1 to " ++ show maxcave ++ "."
@@ -174,7 +178,7 @@ cavespeedbrake = 1      -- multiply speed by this much each player movement (aut
 -- (playerymin, playerymax) = (0.4, 0.4)
 
 -------------------------------------------------------------------------------
--- types
+-- main types
 
 type CaveNum    = Int    -- the number of a cave (and its random seed)
 type MaxSpeed   = Int    -- a maximum dive/scroll speed in a cave
@@ -272,9 +276,115 @@ newGameState firstgame stats w h cavenum maxspeed hs = GameState {
   where
     initspeed = fromIntegral maxspeed / 6
 
--- save files, separated for robustness
+-------------------------------------------------------------------------------
+-- save file helpers
 
--- miscellaneous persistent state
+-- The app's persistent state is split into several persisted types,
+-- each stored separately in its own save file, for robustness.
+
+-- A Loaded a is one of these persisted types loaded into memory, and
+-- its last load time.
+type Loaded a = (a, Maybe UTCTime)
+
+-- XXX an attempt to generalise more:
+-- -- A save file for persisting a certain type, and functions to save/load it.
+-- data SaveFile a = (Read a, Show a, Eq a) => SaveFile {
+--    sfname :: FilePath
+--   ,sfsave :: (Read a, Show a, Eq a) => Loaded a -> IO (Either String (Maybe UTCTime))
+--   ,sfload :: (Read a, Show a, Eq a) => IO (Maybe (Loaded a))
+--   }
+
+-- Where save files are stored.
+getSaveDir :: IO FilePath
+getSaveDir = getXdgDirectory XdgData progname
+
+-- Write a value to the named save file, using a prettified (relatively human readable) show.
+-- The save directory will be created if it does not exist.
+-- Any previous value in the save file will be overwritten.
+save :: (Read a, Show a, Eq a) => FilePath -> a -> IO ()
+save filename val = do
+  d <- getSaveDir
+  createDirectoryIfMissing True d
+  let f = d </> filename
+  writeFile f $ pshow val
+
+-- A more careful version of save that tries to minimise writes and avoid data loss:
+-- 1. if the save file exists and already contains the same value, does nothing
+--    and returns Right Nothing.
+-- 2. if the save file was modified since we last loaded it, writes a new save
+--    file (just one alternate copy, with .new extension), and returns 
+--    Left <warning message>. To detect this case, the last Loaded value (with the
+--    load time from the previous load or maybeSave call) should be provided.
+-- 3. otherwise writes the file and returns Right <current time>, which should
+--    be considered the new last load time.
+-- Currently this requires the following arguments:
+-- - the save file name
+-- - the load function for this type (since some types have a custom one)
+-- - the loaded value to be saved.
+maybeSave :: (Read a, Show a, Eq a) => FilePath -> IO (Maybe (Loaded a)) -> Loaded a -> IO (Either String (Maybe UTCTime))
+maybeSave filename loadfn (val, mlastloadtime) = do
+  dir      <- getSaveDir
+  emodtime <- try $ getModificationTime $ dir </> filename :: IO (Either IOError UTCTime)
+  mcurrent <- loadfn
+  case (mcurrent, mlastloadtime, emodtime) of
+    -- (Just (oldval, _), _, _) | oldval==val ->
+    --   -- value unchanged: do nothing  -- XXX could update last load time ?
+    --   return $ Right Nothing
+
+    (Just _, Just loadtime, Right modtime) | modtime > loadtime -> do
+      -- write conflict: warn and save elsewhere
+      let filename' = filename <.> "new"
+      now <- getCurrentTime
+      return $ Left $
+        "Warning: " ++ filename ++ " file modified since last read, saving "
+        ++ filename' ++ " instead for manual merge:"
+        -- XXX debugging:
+        ++ "\n" ++ dir </> filename ++ "      " ++ show modtime
+        ++ "\n" ++ dir </> filename' ++ "  " ++ show now
+
+    _ -> do
+      -- otherwise: save and update last load time
+      save filename val
+      Right . Just <$> getCurrentTime
+
+-- Try to read a value from the named save file, removing newlines and
+-- then read-ing (this should read save's prettified show output, as well
+-- as standard show output).
+-- Throws an IOException if reading fails,
+-- returns Nothing if the file does not exist,
+-- returns Just (Loaded value) if successful.
+-- The Loaded's load time (which will always be Just, here) should be passed
+-- to maybeSave when next saving this file, to help it detect write conflicts.
+load :: (Read a, Show a, Eq a) => FilePath -> IO (Maybe (Loaded a))
+load filename = do
+  d <- getSaveDir
+  let f = d </> filename
+  exists <- doesFileExist f
+  if not exists
+  then pure Nothing
+  else do
+    s <- filter (/='\n') <$> readFileStrictly f
+    t <- getCurrentTime
+    case readMay s of
+      Nothing -> throwIO $ userError $ init $ unlines [  -- XXX don't print "user error"
+           "could not read " ++ f
+          ,"Perhaps the format has changed ? Please move it out of the way and run again."
+          ]
+      Just v -> return $ Just (v, Just t)
+
+-------------------------------------------------------------------------------
+-- saved miscellaneous state
+
+-- statefile = SaveFile {
+--    sfname = name
+--   ,sfsave = maybeSave name
+--   ,sfload = load name :: IO (Maybe (Loaded a))
+--   }
+--   where name = "state"
+
+statefilename = "state"
+loadState = load statefilename
+saveState = maybeSave statefilename loadState
 
 data SavedState = SavedState {
    currentcave  :: CaveNum     -- the cave most recently played
@@ -288,19 +398,84 @@ newSavedState = SavedState{
   ,highcave     = 0
 }
 
-statefilename   = "state"
-loadState       = load statefilename
-saveState       = maybeSave statefilename
+-------------------------------------------------------------------------------
+-- saved high scores, all formats.
 
--- high scores
-
-type SavedScores = M.Map (CaveNum, MaxSpeed) Score  -- high scores achieved for each cave and max speed 
-
-newSavedScores = M.empty
+-- scoresfile = SaveFile {
+--    sfname = name
+--   ,sfsave = saveScores
+--   ,sfload = loadScores
+--   }
+--   where name = "scores"
 
 scoresfilename  = "scores"
-loadScores      = load scoresfilename
-saveScores      = maybeSave scoresfilename
+
+-- Save high scores in latest file format, avoiding data loss or unnecessary writes.
+saveScores :: Loaded HighScores -> IO (Either String (Maybe UTCTime))
+saveScores = maybeSave scoresfilename loadScores
+
+-- Load high scores if possible, trying the latest file format then each older format in turn.
+-- Returns Nothing if a scores file does not exist or if none of the readers can read it.
+loadScores :: IO (Maybe (Loaded HighScores))
+loadScores =
+      loadHighScores2
+  <|> loadHighScores2From1
+
+  -- load scoresfilename `catch` \(_::IOException) -> return Nothing
+  -- <|> fmap (first (fromHighScores1 player)) <$> load scoresfilename `catch` \(_::IOException) -> return Nothing
+
+loadHighScores2 = load "scores" :: IO (Maybe (Loaded HighScores))
+
+-- v1 format
+
+-- Current user's high score for each cave and max speed.
+type HighScores1 = M.Map (CaveNum, MaxSpeed) Score
+
+fromHighScores1 :: HighScores1 -> HighScores
+fromHighScores1 scores1 = sort [newHighScore{hcave=c,hspeed=s,hscore=sc} | ((c,s),sc) <- M.toList scores1]
+
+loadHighScores1 = load "scores" :: IO (Maybe (Loaded HighScores1))
+
+loadHighScores2From1 = (first fromHighScores1 <$>) <$> (load "scores" :: IO (Maybe (Loaded HighScores1)))
+
+-- v2 format
+
+-- A single high score for a cave and speed.
+-- Fields are ordered most significant first for useful sorting.
+data HighScore = HighScore {
+   hcave   :: CaveNum
+  ,hspeed  :: MaxSpeed
+  ,hscore  :: Score
+} deriving (Show,Read,Eq,Ord)
+
+newHighScore = HighScore {
+   hcave   = 0
+  ,hspeed  = 0
+  ,hscore  = 0
+  }
+
+-- A set of high scores. Kept in a list for a simple readable file format.
+-- These invariants can be expected:
+-- - it is always sorted upward (lowest caves, speeds, scores first)
+-- - there is at most one score for each cave & speed.
+type HighScores = [HighScore]
+
+newHighScores = []
+
+-- Look up the best score for this cave and speed, if any.
+hsLookup :: CaveNum -> MaxSpeed -> HighScores -> Maybe HighScore
+hsLookup cave speed sscores =
+  maximumMay [hs | hs@HighScore{..} <- sscores, hcave==cave, hspeed==speed]
+
+-- Add this score to the sorted high scores if it is the first score
+-- for the given cave & speed, or if it is better than the old score
+-- (and in that case, replace the old score).
+hsUpdate :: HighScore -> HighScores -> HighScores
+hsUpdate new@HighScore{..} scores =
+  case hsLookup hcave hspeed scores of
+    Nothing              -> sort $ new : scores
+    Just old | new > old -> sort $ new : (scores \\ [old])
+    _                    -> scores
 
 -------------------------------------------------------------------------------
 -- app logic
@@ -308,7 +483,7 @@ saveScores      = maybeSave scoresfilename
 main = do
   args <- getArgs
   (sstate@SavedState{..}, sstatet) <- fromMaybe (newSavedState, Nothing) <$> loadState
-  (sscores, sscorest) <- fromMaybe (newSavedScores, Nothing) <$> loadScores
+  (sscores, sscorest) <- fromMaybe (newHighScores, Nothing) <$> loadScores
   when ("-h" `elem` args || "--help" `elem` args) $ exitWithUsage sstate sscores
   let
     (flags, args') = partition ("-" `isPrefixOf`) args
@@ -369,11 +544,11 @@ printCave cavenum mdepth = do
 -- updating save files and/or advancing to next cave when appropriate.
 -- The first arguments specify if this is the first game of a session and
 -- if onscreen dev stats should be displayed.
-playGames :: Bool -> Bool -> CaveNum -> MaxSpeed -> (SavedState, Maybe UTCTime) -> (SavedScores, Maybe UTCTime) -> IO ()
+playGames :: Bool -> Bool -> CaveNum -> MaxSpeed -> (SavedState, Maybe UTCTime) -> Loaded HighScores -> IO ()
 playGames firstgame showstats cavenum maxspeed (sstate@SavedState{..},sstatet) (sscores,sscorest) = do
   (_,screenh) <- displaySize  -- use full screen height for each game (apparently last line is unusable on windows ? surely it's fine)
   let
-    highscore = fromMaybe 0 $ M.lookup (cavenum, maxspeed) sscores
+    highscore = maybe 0 hscore $ hsLookup cavenum maxspeed sscores
     game = newGame firstgame showstats screenh cavenum maxspeed highscore
 
   -- run one game. Will exit if terminal is too small.
@@ -397,7 +572,7 @@ playGames firstgame showstats cavenum maxspeed (sstate@SavedState{..},sstatet) (
     Right t  -> return t
 
   -- update and save any new high score
-  let sscores' = M.insert (cavenum, maxspeed) (max score highscore) sscores
+  let sscores' = hsUpdate newHighScore{hcave=cavenum,hspeed=maxspeed,hscore=score} sscores
   esaved <- saveScores (sscores',sscorest)
   sscorest' <- case esaved of
     Left msg -> hPutStrLn stderr msg >> return sscorest
@@ -678,117 +853,9 @@ playerAtEnd g = case playerLine g of
   _                            -> False
 
 -------------------------------------------------------------------------------
--- save file helpers
-
-getSaveDir :: IO FilePath
-getSaveDir = getXdgDirectory XdgData progname
-
--- -- Try to read a value from the named save file, using read.
--- -- Exits with an error message if reading fails,
--- -- returns Nothing if the file does not exist,
--- -- or Just (value, <current time>) if successful.
--- -- This time should be passed to maybeSave when next saving to this file,
--- -- to help detect write conflicts and prevent data loss.
--- -- (The time is wrapped in Maybe for ease of use, but will always be Just.)
--- load :: (Read a, Show a, Eq a) => FilePath -> IO (Maybe (a, Maybe UTCTime))
--- load filename = do
---   d <- getSaveDir
---   let f = d </> filename
---   exists <- doesFileExist f
---   if not exists
---   then pure Nothing
---   else do
---     v <- readDef (err $ init $ unlines [
---       "could not read " ++ f
---       ,"Perhaps the format has changed ? Please move it out of the way and run again."
---       ]) <$> readFile f
---     t <- getCurrentTime
---     return $ Just (v, Just t)
-
--- Try to read a value from the named save file using read, but first remove
--- any newlines, so this should also read human-readable prettified show output.
--- Exits with an error message if reading fails,
--- returns Nothing if the file does not exist,
--- or Just (value, <current time>) if successful.
--- This time should be passed to maybeSave when next saving to this file,
--- to help detect write conflicts and prevent data loss.
--- (The time is wrapped in Maybe for ease of use, but will always be Just.)
-load :: (Read a, Show a, Eq a) => FilePath -> IO (Maybe (a, Maybe UTCTime))
-load filename = do
-  d <- getSaveDir
-  let f = d </> filename
-  exists <- doesFileExist f
-  if not exists
-  then pure Nothing
-  else do
-    s <- filter (/='\n') <$> readFile f
-    let
-      v = readDef (err $ init $ unlines [
-           "could not read " ++ f
-          ,"Perhaps the format has changed ? Please move it out of the way and run again."
-          ]) s
-    t <- getCurrentTime
-    return $ Just (v, Just t)
-
--- A more careful version of save that tries to minimise writes and avoid data loss:
--- 1. if the save file exists and already contains the same value, does nothing
---    and returns Right Nothing.
--- 2. if the save file was modified since we last loaded it, writes a new save
---    file (just one alternate copy, with .new extension), and returns 
---    Left <warning message>. To detect this case, the last load time
---    (from the previous load or maybeSave call) should be provided.
--- 3. otherwise writes the file and returns Right <current time>, which should
---    be considered the new last load time.
-maybeSave :: (Read a, Show a, Eq a) => FilePath -> (a, Maybe UTCTime) -> IO (Either String (Maybe UTCTime))
-maybeSave filename (val,mlastloadtime)  = do
-  dir      <- getSaveDir
-  emodtime <- try $ getModificationTime $ dir </> filename :: IO (Either IOError UTCTime)
-  mcurrent <- load filename
-  case (mcurrent, mlastloadtime, emodtime) of
-    (Just (oldval, _), _, _) | oldval==val ->
-      -- value unchanged: do nothing  -- XXX could update last load time ?
-      return $ Right Nothing
-
-    (Just _, Just loadtime, Right modtime) | modtime > loadtime -> do
-      -- write conflict: warn and save elsewhere
-      let filename' = filename <.> "new"
-      save filename' val
-      now <- getCurrentTime
-      return $ Left $
-        "Warning: " ++ filename ++ " file modified since last read, saving "
-        ++ filename' ++ " instead for manual merge:"
-        -- XXX debugging:
-        ++ "\n" ++ dir </> filename ++ "      " ++ show modtime
-        ++ "\n" ++ dir </> filename' ++ "  " ++ show now
-
-    _ -> do
-      -- otherwise: save and update last load time
-      save filename val
-      Right . Just <$> getCurrentTime
-
--- -- Write a value to the named save file, using show,
--- -- creating the save directory if it does not exist.
--- -- Any previous value in the save file will be overwritten.
--- save :: (Read a, Show a, Eq a) => FilePath -> a -> IO ()
--- save filename val = do
---   d <- getSaveDir
---   createDirectoryIfMissing True d
---   let f = d </> filename
---   writeFile f $ show val
-
--- Write a value to the named save file, in with a human-readable
--- prettified version of show, creating the save directory if it does
--- not exist. Any previous value in the save file will be overwritten.
-save :: (Read a, Show a, Eq a) => FilePath -> a -> IO ()
-save filename val = do
-  d <- getSaveDir
-  createDirectoryIfMissing True d
-  let f = d </> filename
-  writeFile f $ pshow val
-
-
--------------------------------------------------------------------------------
 -- utilities
+
+readFileStrictly f = readFile f >>= \s -> evaluate (length s) >> return s
 
 -- pretty-show: can't print in colour and had some other drawback
 -- (couldn't print times, maybe fixed now ?) But it generates more
