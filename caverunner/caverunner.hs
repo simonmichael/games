@@ -299,26 +299,46 @@ getSaveDir = getXdgDirectory XdgData progname
 
 -- Types of event we can log.
 -- These are stored in chronological order in an event log file. Notes:
--- Every Begin event is followed by a corresponding Crash or Compl event, for now.
+-- Every Began event is followed by a corresponding Ended event, for now at least.
 -- Events converted from old save files may have some missing (0) or approximated fields.
 data LoggedEvent =
-    Other String                                         -- ^ A line found in the log which we couldn't parse.
-  | Begin UTCTime CaveNum MaxSpeed                       -- ^ Begin a cave run.
-  | Crash UTCTime CaveNum MaxSpeed CaveRow GameCol Score -- ^ End a cave run by crashing.
-  | Compl UTCTime CaveNum MaxSpeed CaveRow GameCol Score -- ^ End a cave run by reaching the end.
+    Other String                                            -- ^ A line found in the log which we couldn't parse.
+  | Began UTCTime CaveNum MaxSpeed                          -- ^ Beginning of a cave run.
+  | Ended UTCTime CaveNum MaxSpeed CaveRow GameCol Score YN -- ^ End of a cave run, with final position, score, and whether completed.
   deriving (Show,Read,Eq,Ord)
+
+-- A more compact Bool.
+data YN = Y | N deriving (Show,Read,Eq,Ord)
+
+-- Calculate old app state types from event log.
+logToAppState :: [LoggedEvent] -> (HighScores, SavedState)
+logToAppState evs = (hs, st)
+  where
+    hs = concatMap highScoreFromEvent evs
+      where
+        highScoreFromEvent (Ended _ ca sp _ _ sc _) = [newHighScore{hcave=ca,hspeed=sp,hscore=sc}]
+        highScoreFromEvent _ = []
+    st = case lastMay evs of
+           Just (Began _ ca sp) -> newSavedState{currentcave=ca,currentspeed=sp,highcave=hc}
+             where
+               hc = maximumDef 0 [c | Ended _ c _ _ _ _ Y <- evs]
+           _ -> newSavedState
+
+-- Read current app state from event log.
+logState :: IO (HighScores, SavedState)
+logState = logRead <&> logToAppState
 
 beginEvent cave sp = do
   t <- getCurrentTime
-  return $ Begin t cave sp
+  return $ Began t cave sp
 
 crashEvent cave sp ro co sc = do
   t <- getCurrentTime
-  return $ Crash t cave sp ro co sc
+  return $ Ended t cave sp ro co sc N
 
 completeEvent cave sp ro co sc = do
   t <- getCurrentTime
-  return $ Compl t cave sp ro co sc
+  return $ Ended t cave sp ro co sc Y
 
 -- testevents = do
 --   be <- beginEvent 1 15
@@ -360,9 +380,9 @@ logMigrate = do
     stateevs  <- stateFileToEvents
     logAppend $ scoresevs ++ stateevs
 
--- Convert 1.0alpha's scores file (format 1 or 2) to Begin, Crash/Compl event pairs.
+-- Convert 1.0alpha's scores file (format 1 or 2) to Began, Ended event pairs.
 -- The scores file's last modification time is used as their timestamps.
--- The Crash/Compl events' column will be 0.
+-- The Ended events' column will be 0.
 -- Returns no events if the file does not exist.
 scoresFileToEvents :: IO [LoggedEvent]
 scoresFileToEvents = do
@@ -373,16 +393,16 @@ scoresFileToEvents = do
       t <- getModificationTime . (</> scoresfilename) =<< getSaveDir
       let
         scoreToEvents HighScore{..} = [
-          Begin t hcave hspeed,
-          -- in the scores files, all caves are 462 deep and score is also the depth reached
-          (if hscore==462 then Compl else Crash) t hcave hspeed hscore 0 hscore
+          Began t hcave hspeed,
+          Ended t hcave hspeed hscore 0 hscore (if hscore==462 then Y else N)
+            -- in the scores files, score = depth reached and all caves are 462 deep
           ]
       return $ concatMap scoreToEvents ss
   
--- Convert 1.0alpha's state file to a Begin, Crash event pair 
+-- Convert 1.0alpha's state file to a Began, Ended event pair 
 -- describing the most recently played cave & speed.
 -- The state file's last modification time is used as their timestamps.
--- The Crash event's position & score will be 0.
+-- The Ended event's position & score will be 0.
 -- Returns no events if the file does not exist.
 stateFileToEvents :: IO [LoggedEvent]
 stateFileToEvents = do
@@ -391,7 +411,7 @@ stateFileToEvents = do
     Nothing -> return []
     Just (SavedState{currentcave, currentspeed}, _) -> do
       t <- getModificationTime . (</> statefilename) =<< getSaveDir
-      return [Begin t currentcave currentspeed, Crash t currentcave currentspeed 0 0 0]
+      return [Began t currentcave currentspeed, Ended t currentcave currentspeed 0 0 0 N]
   
 -------------------------------------------------------------------------------
 -- support for format 1 & 2 save files
@@ -565,9 +585,9 @@ hsUpdate new@HighScore{..} scores =
 main = do
   args <- getArgs
   logMigrate
-  history <- logRead
   (sstate@SavedState{..}, sstatet) <- fromMaybe (newSavedState, Nothing) <$> loadState
   (sscores, sscorest) <- fromMaybe (newHighScores, Nothing) <$> loadScores
+  -- (sscores, sstate@SavedState{..}) <- logState
   when ("-h" `elem` args || "--help" `elem` args) $ exitWithUsage sstate sscores
   let
     (flags, args') = partition ("-" `isPrefixOf`) args
