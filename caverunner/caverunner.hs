@@ -861,11 +861,15 @@ readFileStrictly f = readFile f >>= \s -> evaluate (length s) >> return s
 -- (couldn't print times, maybe fixed now ?) But it generates more
 -- compact and human-readable output than pretty-simple.
 
-pshow :: Show a => a -> String
+pshow, ps :: Show a => a -> String
 pshow = PrettyShow.ppShow
 
-pprint :: Show a => a -> IO ()
+ps = pshow
+
+pprint, pp :: Show a => a -> IO ()
 pprint = PrettyShow.pPrint
+
+pp = pprint
 
 -- pshow :: Show a => a -> String
 -- pshow = T.unpack . PrettySimple.pShowNoColor
