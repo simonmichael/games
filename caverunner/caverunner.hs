@@ -107,10 +107,11 @@ progressMessage sstate@SavedState{..} sscores = unlines [
     highscore = maybe 0 hscore $ hsLookup currentcave currentspeed sscores
 
 unlockedCavesMessage SavedState{..} =
-  "You have completed " ++ cavecompleted ++ ", and can reach caves 1 to " ++ show maxcave ++ "."
+  "You have completed " ++ cavecompleted ++ ", and can reach " ++ caves ++ "."
   where
     cavecompleted = if highcave==0 then "no caves" else "cave "++show highcave
     maxcave = highcave + cavelookahead
+    caves = if maxcave == 1 then "cave 1" else "caves 1 to " ++ show maxcave
 
 -------------------------------------------------------------------------------
 -- tweakable parameters
