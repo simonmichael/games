@@ -79,12 +79,7 @@ Sound
 Persistence
 
 - Persistent state is part of the gameplay and must be reliable.
-- Persistent state is saved in separate files (progress, scores, crashes..) for robustness and readability.
-- Data loss (eg from multiple instances writing state) is avoided by not overwriting a more-recently-modified file.
-- In case of write conflict, the new state is written in a separate file for manual resolution (one copy only). Auto-merging will be implemented later.
-- State is serialised with pretty-show and modified read, for simplicity and easy reading/repair.
-- Old state file formats are read and automatically migrated to the latest format where possible.
-  - Currently, state files do not have an explicit version (format) marker, and all versions reuse the same filename. It tries newest formats first, and assumes first successful read is correct.
+- Persistent state is extracted from an append-only event log, for robustness and evolvability.
 
 
 ### Roadmap/Wishlist
@@ -92,37 +87,28 @@ Persistence
 - version numbers
 - readme/install doc updates
 - review release scope
-- persistence
-  - multiple named saves ?
-  - group scores by speed ?
-  - per-speed cave states ?
-    - what is primary, cave or speed ?
-    - how will fixed-speed and future variable-speed scores/progress coexist ?
-  - more readable scores format ?
-    - can pretty-printed be read ?
-  - less readable state format ?
-  - on conflict, merge (only save better progress/scores) instead of writing elsewhere ?
-- speed-based score bonus at cave end ?
-- remember crash sites
+- print high scores by cave/speed
+- speed-based score bonus at cave end
+- show crash sites
+- multiple named saves ?
 - cave-specific colours ?
 - light/dark schemes ? cf Terminal.app silver aerogel
-- 3 lives ?
-- attract mode / high score table
 - better run/install docs
 - show actual frame rate
 - beta test
 - test sound latency on other machines, windows
 - 1.0 release
-- more sideways cave movement ?
-- alternate player control schemes
-  - accelerate sideways ?
+- attract mode / in-game high score table
+- high score sharing / server
+- 3 lives ?
+- more interesting caves
+- freeform user created caves
+- sideways acceleration ?
 - braking thrusters, with limited fuel
   - activated by a modifier key when those are available
   - otherwise by toggling left/right ?
 - auto speedup/slowdown in next game ?
 - return flight to the top ?
-- more varied caves and flight mechanics
-- high score sharing / server
 - document vs code+hls setup, dev workflows
 - sound
   - don't clip end of sounds, or muffle sounds < 100ms
