@@ -84,20 +84,19 @@ Persistence
 
 ### Roadmap/Wishlist
 
-- version numbers
-- readme/install doc updates
-- review release scope
 - print high scores by cave/speed
 - speed-based score bonus at cave end
 - show crash sites
-- multiple named saves ?
+- events/state cleanup
 - cave-specific colours ?
 - light/dark schemes ? cf Terminal.app silver aerogel
-- better run/install docs
+- version numbers
 - show actual frame rate
+- better run/install docs
 - beta test
 - test sound latency on other machines, windows
 - 1.0 release
+- multiple named saves ?
 - attract mode / in-game high score table
 - high score sharing / server
 - 3 lives ?
