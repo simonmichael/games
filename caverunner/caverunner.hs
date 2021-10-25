@@ -40,6 +40,7 @@ import Data.Functor ((<&>))
 import Data.List
 import qualified Data.Map as M
 import Data.Maybe
+import Data.Ord
 import Data.Time (UTCTime(..), getCurrentTime)
 import Debug.Trace
 import Safe
@@ -79,6 +80,7 @@ usage termsize msoxpath sstate@SavedState{..} sscores = (banner++) $ init $ unli
   ,"Usage:"
   ,"caverunner.hs                            # install deps, compile, run the game"
   ,"caverunner [CAVE [SPEED]]                # run the game"
+  ,"caverunner --scores|-s                   # show high scores"
   ,"caverunner --print-cave [CAVE [DEPTH]]   # show the cave on stdout"
   ,"caverunner --help|-h                     # show this help"
   ,""
@@ -518,6 +520,8 @@ main = do
   cavenum `seq` if
     --  | "--print-speed-sound-volume" `elem` flags -> printSpeedSoundVolumes
 
+    | "-s" `elem` args || "--scores" `elem` flags -> printScores
+
     | "--print-cave" `elem` flags ->
       let mdepth = if hasspeedarg then Just speed else Nothing
       in printCave cavenum mdepth
@@ -525,6 +529,22 @@ main = do
     | otherwise -> do
       let sstate' = sstate{ currentcave=cavenum, currentspeed=speed }
       playGames True ("--stats" `elem` flags) cavenum (fromIntegral speed) sstate' sscores
+
+-- Print high scores to stdout.
+printScores = do
+  (_state@SavedState{..}, scores) <- logState
+  putStrLn "High scores"
+  putStrLn "-----------"
+  let scoresbyspeed =
+        reverse [(sp, filter ((==sp).hspeed) scores) | sp <- nub $ sort $ map hspeed scores]
+  forM_ scoresbyspeed $ \(sp, scs) -> do
+    let
+      hs = maximumBy (comparing hcave) scs
+      completed = nub $ sort $ map hcave $ filter ((==462).hscore) scs  -- XXX
+    printf "speed %2d:" sp
+    printf " highest cave %2d, score %3d" (hcave hs) (hscore hs)
+    if null completed then return () else printf ", completed %s" (unwords $ map show completed)
+    putStrLn ""
 
 -- Generate the cave just like the game would, printing each line to stdout.
 -- Optionally, limit to just the first N lines.
@@ -590,6 +610,8 @@ playGames firstgame showstats cavenum maxspeed sstate@SavedState{..} sscores = d
     playGames False showstats cavenum' maxspeed sstate' sscores'
   else do
     putStr $ progressMessage sstate' sscores'
+    putStrLn ""
+    printScores
     when soundEnabled quitSound
 
 -- Initialise a new game (a cave run).

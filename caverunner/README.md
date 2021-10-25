@@ -84,7 +84,6 @@ Persistence
 
 ### Roadmap/Wishlist
 
-- print high scores by cave/speed
 - speed-based score bonus at cave end
 - show crash sites
 - events/state cleanup
