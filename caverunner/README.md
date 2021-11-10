@@ -84,7 +84,6 @@ Persistence
 
 ### Roadmap/Wishlist
 
-- speed-based score bonus at cave end
 - show crash sites
 - events/state cleanup
 - cave-specific colours ?
