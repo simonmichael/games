@@ -539,7 +539,7 @@ printScores = do
         reverse [(sp, filter ((==sp).hspeed) scores) | sp <- nub $ sort $ map hspeed scores]
   forM_ scoresbyspeed $ \(sp, scs) -> do
     let
-      hs = maximumBy (comparing hcave) scs
+      hs = maximumBy (comparing hcave) $ filter ((==sp).hspeed) scs
       completed = nub $ sort $ map hcave $ filter ((==462).hscore) scs  -- XXX
     printf "speed %2d:" sp
     printf " highest cave %2d, score %3d" (hcave hs) (hscore hs)
