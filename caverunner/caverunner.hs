@@ -125,8 +125,8 @@ crashchar          = '*'
 fps                = 60  -- target frame rate; computer/terminal may not achieve it
 restartdelaysecs   = 3   -- minimum pause after game over
 minhelpsecs        = 5   -- minimum time to show onscreen help in first game
-completionbonusdelaysecs   = 1.5
-completionadvancedelaysecs = 3
+completionbonusdelaysecs   = 2
+completionadvancedelaysecs = 4
 
 {- Three widths:
 
@@ -550,7 +550,7 @@ printScores = do
         reverse [(sp, filter ((==sp).hspeed) scores) | sp <- nub $ sort $ map hspeed scores]
   forM_ scoresbyspeed $ \(sp, scs) -> do
     let
-      hs = maximumBy (comparing hcave) $ filter ((==sp).hspeed) scs
+      hs = maximumBy (comparing hcave) $ filter ((==sp).hspeed) scs     -- XXX are these working right ?
       completed = nub $ sort $ map hcave $ filter ((==462).hscore) scs  -- XXX
     printf "speed %2d:" sp
     printf " highest cave %2d, score %3d" (hcave hs) (hscore hs)
