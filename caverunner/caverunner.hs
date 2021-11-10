@@ -125,6 +125,8 @@ crashchar          = '*'
 fps                = 60  -- target frame rate; computer/terminal may not achieve it
 restartdelaysecs   = 3   -- minimum pause after game over
 minhelpsecs        = 5   -- minimum time to show onscreen help in first game
+completionbonusdelaysecs   = 1.5
+completionadvancedelaysecs = 3
 
 {- Three widths:
 
@@ -200,11 +202,16 @@ type CaveCol = Column
 -- One line within a cave, with its left/right wall positions.
 data CaveLine = CaveLine GameCol GameCol deriving (Show)
 
+-- A game scene/mode. Some scenes may progress through numbered subscenes/phases starting at 1.
 data Scene =
     Playing
   | Crashed
-  | Won
+  | Complete Int  -- 1 game over 2 score bonus / high score 3 press a key
   deriving (Show,Eq)
+
+-- -- Which Complete phase is this scene, or 0 if not Complete.
+-- completePhase (Complete n) = n
+-- completePhase _ = 0
 
 -- In-memory state for a single cave run. A player might consider
 -- several of these one "game" if they complete multiple runs without crashing.
@@ -223,11 +230,13 @@ data GameState = GameState {
   -- current game state
   ,gamew           :: Width      -- width of the game  (but perhaps not the screen)
   ,gameh           :: Height     -- height of the game (and usually the screen)
-  ,gtick           :: Integer    -- current game tick
+  ,gtick           :: Integer    -- ticks elapsed within the current game
+  ,stick           :: Integer    -- ticks elapsed within the current scene
   ,cavenum         :: CaveNum
   ,highscore       :: Score      -- high score for the current cave and max speed
   ,highscorecopy   :: Score      -- a copy to help detect new high score during cave end scene
   ,score           :: Score      -- current score in this game
+  ,scorebonus      :: Score      -- during cave complete scene: bonus awarded for this cave
   ,randomgen       :: StdGen
   ,cavesteps       :: Int        -- how many cave lines have been generated since game start (should be Integer but I can't be bothered)
   ,cavelines       :: [CaveLine] -- recent cave lines, for display; newest/bottom-most first
@@ -257,10 +266,12 @@ newGameState firstgame stats w h cavenum maxspeed hs = GameState {
   ,gamew           = w
   ,gameh           = h
   ,gtick           = 0
+  ,stick           = 0
   ,cavenum         = cavenum
   ,highscore       = hs
   ,highscorecopy   = hs
   ,score           = 0
+  ,scorebonus      = 0
   ,randomgen       = mkStdGen cavenum
   ,cavesteps       = 0
   ,cavelines       = []
@@ -634,6 +645,7 @@ step' g@GameState{..} Tick = step g' Tick
   where
     g' = g{
        gtick=gtick+1
+      ,stick=stick+1
       ,showhelp=showhelp && not (timeToHideHelp g)
       }
 step' g ev = step g ev
@@ -665,11 +677,10 @@ step g@GameState{scene=Playing, ..} Tick =
 
       | starting -> unsafePlay gameStartSound g
 
-      | gameover ->  -- crashed / reached the end
+      | gameover ->  -- crashed or reached the end
         unsafePlay (if victory then victorySound else crashSound cavespeed) $
-        (if score > highscore then unsafePlay endGameHighScoreSound else id) $
-        g{ scene        = if victory then Won else Crashed
-          ,highscore    = max score highscore
+        g{ scene        = if victory then Complete 1 else Crashed
+          ,stick        = 0
           ,restarttimer = reset restarttimer
           }
 
@@ -715,9 +726,33 @@ step g@GameState{scene=Playing, ..} Tick =
             ,cavespeedmin = cavespeedmin'
             }
 
+-- completionbonusdelaysecs into the cave complete scene, add score bonus and maybe play/show high score message
+step g@GameState{scene=Complete 1, ..} Tick
+  | stick > secsToTicks completionbonusdelaysecs =
+      (if score > highscore then unsafePlay endGameHighScoreSound else id) $
+      g{scene=Complete 2
+       ,restarttimer = tick restarttimer
+       ,score      = score'
+       ,scorebonus = bonus  -- save this for display
+       ,highscore  = max highscore score'
+       }
+  where
+    score' = score + bonus
+    bonus = round cavespeedmax * completionbonusmultiplier
+      where completionbonusmultiplier = 10
+
+step g@GameState{scene=Complete _, ..} Tick = g{restarttimer = tick restarttimer}
+
+step g@GameState{scene=Crashed, ..} Tick = g{restarttimer = tick restarttimer}
+
 step g@GameState{..} (KeyPress 'q') = g { exit = True }
 
-step g@GameState{..} Tick | gameOver g = g{restarttimer = tick restarttimer}
+-- XXX trying to support pause during game over
+-- step g@GameState{..} (KeyPress k)
+--   | k `elem` " p"         = g{pause=True}
+--   | k `elem` " p", pause  = g{pause=False}
+--   | gameOver g, isExpired restarttimer = g{restart=True}
+--   | gameOver g = g
 
 step g@GameState{..} (KeyPress _) | gameOver g, isExpired restarttimer = g{restart=True}
 
@@ -728,7 +763,7 @@ step g@GameState{..} (KeyPress k)
   | k `elem` " p", pause  = g{pause=False}
   | otherwise             = g
 
-step GameState{..} Tick = error $ "No handler for " ++ show scene ++ " -> " ++ show Tick ++ " !"
+-- step GameState{..} Tick = error $ "No handler for " ++ show scene ++ " -> " ++ show Tick ++ " !"
 
 -------------------------------------------------------------------------------
 -- logic helpers
@@ -830,7 +865,10 @@ stepScore g@GameState{..} cavesteps'
 -------------------------------------------------------------------------------
 -- game state helpers
 
-gameOver GameState{scene} = scene `elem` [Crashed,Won]
+gameOver GameState{scene} = case scene of
+  Crashed    -> True
+  Complete _ -> True
+  _          -> False
 
 -- Create a timer for the next cave step, given the desired steps/s.
 -- The steps/s should be no greater than ticks/s (the frame rate),
@@ -970,7 +1008,7 @@ draw g@GameState{..} =
     highscorew = 17
     scorew     = 11
     speedw     = 10
-    gameoverw  = 40
+    gameoverw  = 48
     gameoverh  = 7
 
     titlex     = 1
@@ -1046,7 +1084,18 @@ drawStats g@GameState{..} =
   === (stringPlane " minspeed " ||| stringPlane (printf "%3.f " cavespeedmin))
   -- === (stringPlane " speedpan " ||| stringPlane (printf "%3d " speedpan))
   -- === (stringPlane "    speed " ||| stringPlane (printf "%3.f " cavespeed))
+  === (stringPlane "   gtick " ||| stringPlane (printf "%4d " gtick))
+  === (stringPlane "   stick " ||| stringPlane (printf "%4d " stick))
+  === (stringPlane "scene " ||| stringPlane (printf "%-7s " (showSceneCompact 7 scene)))
+  -- === (stringPlane "   bonus " ||| stringPlane (printf "%4d " scorebonus))
 
+showSceneCompact width scene = 
+  case scene of
+    Complete n -> take (width-length sn) ss ++ sn
+      where sn = show n
+    _ -> take width ss
+  where ss = show scene
+ 
 drawGameOver g@GameState{..} w h =
   box w h '-'
   & (2,2) % box (w-2) (h-2) ' '
@@ -1054,20 +1103,21 @@ drawGameOver g@GameState{..} w h =
   & (y2,x2) % stringPlane l2
   & (if isExpired restarttimer then (y3,x3) % stringPlane l3 else id)
   where
-    [l1,l2,l3]
-      -- printf makes runtime errors, be careful
-      | playerAtEnd g = [
-         printf "CAVE %d COMPLETE" cavenum
-        ,printf "Nice flying!%s" hs
-        ,"Press a key to advance.."
-        ]
-      | otherwise = [
+    showline2 = stick > secsToTicks completionbonusdelaysecs
+    showline3 = stick > secsToTicks completionadvancedelaysecs
+    -- printf makes runtime errors, be careful
+    [l1,l2,l3] = case scene of
+      Crashed -> [
          "GAME OVER"
-        ,printf "You reached depth %d.%s" (playerDepth g) hs
-        ,"Press a key to relaunch.."
+        ,if showline2 then printf "You reached depth %d.%s" (playerDepth g) hs else ""
+        ,if showline3 then "Press a key to relaunch.." else ""
         ]
-    hs | score > highscorecopy = " New high score!"
-       | otherwise             = ""
+      Complete n -> [
+         printf "CAVE %d COMPLETE" cavenum
+        ,if showline2 then printf "Nice flying! Bonus: %d.%s" scorebonus hs else ""
+        ,if showline3 then "Press a key to advance.." else ""
+        ]
+    hs = if score > highscorecopy then " New high score!" else ""
     xstart str = 2 + half innerw - half (fromIntegral $ length str) where innerw = w - 2
     (y1, x1) = (3, xstart l1)
     (y2, x2) = (4, xstart l2)
@@ -1179,12 +1229,14 @@ inGameHighScoreSound = soxPlay False [".1 sin 800 sin 800 delay 0 +.2"]
 
 endGameHighScoreSound =
   soxPlay False [
-    ".05 sin 400 sin 500 sin 600 sin 800 sin 800"
-    ,"delay", overalldelay
-    ,"+.1 +.1 +.1 +.2"
+    ".05 sin 400 sin 500 sin 600 sin 800"
+    -- ".05 sin 400 sin 500 sin 600 sin 800 sin 800"  -- extra end note in case of truncation ?
+    ,"delay", overalldelay  -- not used any more but tricky to remove
+    ,"+.1 +.1 +.1"
+    -- ,"+.1 +.1 +.1 +.2"
     ]
   where
-    overalldelay = show $ restartdelaysecs / 2
+    overalldelay = "0" -- show $ restartdelaysecs / 2
 
 victorySound = do
   soxPlay False [
