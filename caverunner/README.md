@@ -84,7 +84,6 @@ Persistence
 
 ### Roadmap/Wishlist
 
-- simplify log format
 - make speed primary
 - limit to 10 v1 caves
 - tweak cave progression

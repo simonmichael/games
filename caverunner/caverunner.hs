@@ -340,58 +340,51 @@ hsUpdate new@HighScore{..} scores =
 -------------------------------------------------------------------------------
 -- persistence
 
--- We save persistent state by logging events to a log file (AKA
--- "format 3"), from which current state (game progress, high scores,
--- crash sites..) is calculated. This is robust, forgiving, simple,
--- and efficient enough for now.
+-- We save persistent state by logging events to a log file ("format 4"),
+-- from which current state (game progress, high scores, crash sites..) is
+-- calculated. This is robust, forgiving, simple, and efficient enough for now.
 
--- Where save files are stored.
+-- Where we store save files.
 getSaveDir :: IO FilePath
 getSaveDir = getXdgDirectory XdgData progname
 
 -- Types of event we can log.
--- These are stored in chronological order in an event log file. Notes:
--- Every Began event is followed by a corresponding Ended event, for now at least.
+-- These are stored in chronological order in an event log file.
 -- Events converted from old save files may have some missing (0) or approximated fields.
 data LoggedEvent =
-    Other String                                            -- ^ A line found in the log which we couldn't parse.
-  | Began UTCTime CaveNum MaxSpeed                          -- ^ Beginning of a cave run.
-  | Ended UTCTime CaveNum MaxSpeed CaveRow GameCol Score YN -- ^ End of a cave run, with final position, score, and whether completed.
+    Other String                                          -- ^ A line found in the log which we couldn't parse.
+  | Crash UTCTime MaxSpeed CaveNum CaveRow GameCol Score  -- ^ End of an incomplete cave run, with speed, cave, final position and score.
+  | Compl UTCTime MaxSpeed CaveNum CaveRow GameCol Score  -- ^ End of a complete cave run, with speed, cave, final position and score.
+  deriving (Show,Read,Eq,Ord)
+
+-- Older event log format 3.
+data LoggedEvent3 =
+    Ended UTCTime CaveNum MaxSpeed CaveRow GameCol Score YN  -- ^ End of a cave run, with cave, speed, final position, score and whether completed.
   deriving (Show,Read,Eq,Ord)
 
 -- A more compact Bool.
 data YN = Y | N deriving (Show,Read,Eq,Ord)
 
--- beginEvent cave sp = do
---   t <- getCurrentTime
---   return $ Began t cave sp
+fromFormat3 :: LoggedEvent3 -> LoggedEvent
+fromFormat3 (Ended t ca sp r c sc compl) = (if compl==Y then Compl else Crash) t sp ca r c sc
 
--- crashEvent cave sp ro co sc = do
---   t <- getCurrentTime
---   return $ Ended t cave sp ro co sc N
-
--- completeEvent cave sp ro co sc = do
---   t <- getCurrentTime
---   return $ Ended t cave sp ro co sc Y
-
--- testevents = do
---   be <- beginEvent 1 15
---   cr <- crashEvent 1 15 10 20 10
---   co <- completeEvent 1 15 462 20 462
---   return [be,cr,co]
-
+-- Read one line of the event log if possible, including older formats.
+readLogLine :: String -> LoggedEvent
+readLogLine s = fromMaybe (Other s) $ fromFormat3 <$> readMay s <|> readMay s
+  
 -- Calculate app state, high scores from events.
 eventsToAppState :: [LoggedEvent] -> (SavedState, HighScores)
 eventsToAppState evs = (st, hs)
   where
-    hc = maximumDef 0 [c | Ended _ c _ _ _ _ Y <- evs]
+    hc = maximumDef 0 [c | Compl _ c _ _ _ _ <- evs]
     st = case lastMay evs of
-           Just (Began _ ca sp) -> newSavedState{currentcave=ca,currentspeed=sp,highcave=hc}
-           Just (Ended _ ca sp _ _ _ _) -> newSavedState{currentcave=ca,currentspeed=sp,highcave=hc}
+           Just (Crash _ sp ca _ _ _) -> newSavedState{currentcave=ca,currentspeed=sp,highcave=hc}
+           Just (Compl _ sp ca _ _ _) -> newSavedState{currentcave=ca,currentspeed=sp,highcave=hc}
            _ -> newSavedState
     hs = concatMap highScoreFromEvent evs
       where
-        highScoreFromEvent (Ended _ ca sp _ _ sc _) = [newHighScore{hcave=ca,hspeed=sp,hscore=sc}]
+        highScoreFromEvent (Crash _ sp ca _ _ sc) = [newHighScore{hcave=ca,hspeed=sp,hscore=sc}]
+        highScoreFromEvent (Compl _ sp ca _ _ sc) = [newHighScore{hcave=ca,hspeed=sp,hscore=sc}]
         highScoreFromEvent _ = []
 
 -- Read current app state from event log.
@@ -419,7 +412,7 @@ logRead = do
   f <- logPath
   exists <- doesFileExist f
   if exists
-  then readFile f <&> map (\l -> readDef (Other l) l) . lines
+  then readFile f <&> map readLogLine . lines
   else return []
 
 -- If the event log file doesn't exist, look for the older state and scores
@@ -437,11 +430,11 @@ logMigrate = do
 -- we look for those older files and convert them to a `log` file
 -- automatically.
 
--- Convert 1.0alpha's state file to a Began, Ended event pair 
--- describing the most recently played cave & speed.
--- The state file's last modification time is used as their timestamps.
--- The Ended event's position & score will be 0.
--- Returns no events if the file does not exist.
+-- Convert 1.0alpha's state file to one LoggedEvent describing the most 
+-- recently played speed & cave.
+-- The state file's last modification time is used as the timestamp.
+-- The position & score will be 0.
+-- Returns no event if the file does not exist.
 stateFileToEvents :: IO [LoggedEvent]
 stateFileToEvents = do
   mls <- load statefilename
@@ -449,14 +442,14 @@ stateFileToEvents = do
     Nothing -> return []
     Just (SavedState{currentcave, currentspeed}) -> do
       t <- getModificationTime . (</> statefilename) =<< getSaveDir
-      return [Began t currentcave currentspeed, Ended t currentcave currentspeed 0 0 0 N]
+      return [Crash t currentcave currentspeed 0 0 0]
   where
     statefilename = "state"
   
--- Convert 1.0alpha's scores file (format 1 or 2) to Began, Ended event pairs.
+-- Convert 1.0alpha's scores file (format 1 or 2) to LoggedEvents.
 -- The scores file's last modification time is used as their timestamps.
--- The Ended events' column will be 0.
--- Returns no events if the file does not exist.
+-- The columns will be 0. The score will be equal to the depth reached
+-- (old scoring system). Returns no events if the file does not exist.
 scoresFileToEvents :: IO [LoggedEvent]
 scoresFileToEvents = do
   -- load an old scores file if possible, trying format 2 then 1,
@@ -466,12 +459,10 @@ scoresFileToEvents = do
     Just ss -> do
       t <- getModificationTime . (</> scoresfilename) =<< getSaveDir
       let
-        scoreToEvents HighScore{..} = [
-          Began t hcave hspeed,
-          Ended t hcave hspeed hscore 0 hscore (if hscore==462 then Y else N)
-            -- in the scores files, score = depth reached and all caves are 462 deep
-          ]
-      return $ concatMap scoreToEvents ss
+        scoreToEvent HighScore{..} =
+          -- in the scores files, score = depth reached and all caves are 462 deep
+          (if hscore==462 then Compl else Crash) t hspeed hcave hscore 0 hscore
+      return $ map scoreToEvent ss
   where
     scoresfilename = "scores"
     fromHighScores1 :: HighScores1 -> HighScores
@@ -592,20 +583,15 @@ playGames firstgame showstats cavenum maxspeed sstate@SavedState{..} sscores = d
     highscore = maybe 0 hscore $ hsLookup cavenum maxspeed sscores
     game = newGame firstgame showstats screenh cavenum maxspeed highscore
 
-  -- persistence: log a begin event, but only if playGameS is likely to succeed
-  when (screenw >= gamewidth) $ do
-    t <- getCurrentTime
-    logAppend [Began t cavenum maxspeed]
-
   -- run one game. Will exit if terminal is too small.
   g@GameState{score,exit,playerx} <- Terminal.Game.playGameS game
 
   -- game ended by crashing, reaching cave end, or quitting with q. (Ctrl-c is not caught here.)
   -- if the end was reached, advance to next cave and maybe update highest cave completed
   let
-    (cavenum', highcave', completed)
-      | playerAtEnd g = (cavenum+1, max highcave cavenum, Y)
-      | otherwise     = (cavenum, highcave, N)
+    (cavenum', highcave', evcons)
+      | playerAtEnd g = (cavenum+1, max highcave cavenum, Compl)
+      | otherwise     = (cavenum, highcave, Crash)
     sstate' = sstate{
        currentcave  = cavenum'
       ,highcave     = highcave'
@@ -613,7 +599,7 @@ playGames firstgame showstats cavenum maxspeed sstate@SavedState{..} sscores = d
     sscores' = hsUpdate newHighScore{hcave=cavenum,hspeed=maxspeed,hscore=score} sscores
   -- persistence: log an end event
   t <- getCurrentTime
-  logAppend [Ended t cavenum maxspeed (playerDepth g) playerx score completed]
+  logAppend [evcons t maxspeed cavenum (playerDepth g) playerx score]
 
   -- play again, or exit the app
   if not exit
