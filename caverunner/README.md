@@ -84,6 +84,11 @@ Persistence
 
 ### Roadmap/Wishlist
 
+- simplify log format
+- make speed primary
+- limit to 10 v1 caves
+- tweak cave progression
+- improve high scores display
 - show crash sites
 - events/state cleanup
 - cave-specific colours ?
