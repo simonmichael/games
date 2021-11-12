@@ -81,8 +81,8 @@ usage termsize msoxpath sstate@SavedState{..} = (banner++) $ init $ unlines [
   ,"caverunner --print-cave [CAVE [DEPTH]]   # show the cave on stdout"
   ,"caverunner --help|-h                     # show this help"
   ,""
-  ,"SPEED sets a different maximum speed (difficulty), from 1 to 60 (default: 15)."
-  ,"CAVE selects a different cave, from 1 to <highest completed at SPEED + "++show cavelookahead++">."
+  ,"SPEED sets a different maximum speed (difficulty), from 1 to "++show maxmaxspeed++" (default: "++show defmaxspeed++")."
+  ,"CAVE selects a different cave, 1 to <highest completed at SPEED + "++show cavelookahead++"> (max "++show maxcavenum++")."
   ,""
   ,"Your terminal size is "++termsize++". (80x25 terminals are best for competition play.)"
   ,soundMessage msoxpath
@@ -186,7 +186,9 @@ cavewidthdurations = [ -- how long should the various cave widths last ?
 --  ( 8,50) "at 8-9,   narrow every 50 lines"
 
 defcavenum  = 1
+maxcavenum  = 10  -- limit to 10 v1 caves
 defmaxspeed = 15
+maxmaxspeed = 60
 cavelookahead = 1
 
 cavespeedinit  = 1      -- nominal initial cave scroll speed (= player's speed within the cave)
@@ -389,7 +391,9 @@ data LoggedEvent3 =
 data YN = Y | N deriving (Show,Read,Eq,Ord)
 
 fromFormat3 :: LoggedEvent3 -> LoggedEvent
-fromFormat3 (Ended t ca sp r c sc compl) = (if compl==Y then Compl else Crash) t sp ca r c sc
+fromFormat3 ev@(Ended t ca sp r c sc compl) 
+  | ca > maxcavenum = Other $ show ev   -- ignore scores for no-longer-playable caves
+  | otherwise = (if compl==Y then Compl else Crash) t sp ca r c sc
 
 -- Read one line of the event log if possible, including older formats.
 readLogLine :: String -> LoggedEvent
@@ -553,8 +557,8 @@ main = do
           where sp = checkspeed $ readDef (speederr s) s
         _     -> err "too many arguments, please see --help"
         where
-          checkspeed s = if s >= 1 && s <= 60 then s else speederr $ show s
-          speederr a = err $ "SPEED should be 1-60 (received "++a++"), see --help)"
+          checkspeed s = if s >= 1 && s <= maxmaxspeed then s else speederr $ show s
+          speederr a = err $ "SPEED should be 1-"++show maxmaxspeed++" (received "++a++"), see --help)"
           checkcave s c
             | c <= highcave + cavelookahead = c
             | otherwise = err $ init $ unlines [
@@ -563,7 +567,7 @@ main = do
                 ,unlockedCavesMessage sstate
                 ]
             where highcave = fromMaybe 0 $ M.lookup s highcaves
-          caveerr a = err $ "CAVE should be a natural number (received "++a++"), see --help)"
+          caveerr a = err $ "CAVE should be 1-"++show maxcavenum++" (received "++a++"), see --help)"
 
   cavenum `seq` if
     --  | "--print-speed-sound-volume" `elem` flags -> printSpeedSoundVolumes
@@ -617,16 +621,19 @@ playGames firstgame showstats maxspeed cavenum sstate@SavedState{..} = do
   g@GameState{score,exit,playerx} <- Terminal.Game.playGameS game
 
   -- game ended by crashing, reaching cave end, or quitting with q. (Ctrl-c is not caught here.)
-  -- if the end was reached, advance to next cave and maybe update highest cave completed
-  let
-    (cavenum', evcons)
-      | playerAtEnd g = (cavenum+1, Compl)
-      | otherwise     = (cavenum,   Crash)
   -- persistent state: log an end event
+  let atend = playerAtEnd g
+  let evcons = if atend then Compl else Crash
   t <- getCurrentTime
   logAppend [evcons t maxspeed cavenum (playerDepth g) playerx score]
-  -- in-memory state: update
-  let sstate' = savedStateUpdate maxspeed cavenum' score sstate
+  -- in-memory state: update high caves/scores, and
+  -- if the end was reached, advance to next cave or speed
+  let
+    (cavenum', maxspeed')
+      | not atend             = (cavenum,   maxspeed)
+      | cavenum < maxcavenum  = (cavenum+1, maxspeed)
+      | otherwise             = (1,         maxspeed+5)
+    sstate' = savedStateUpdate maxspeed cavenum' score sstate
 
   -- play again, or exit the app
   if not exit
@@ -1225,7 +1232,7 @@ closeShaveSound distance = do
 crashSound speed = do
   soxPlay False [show d, "brownnoise", "fade", "l", "0", "-0", show d, "vol", show v]
   where
-    speed' = min 60 $ 30 + speed / 2
+    speed' = min (fromIntegral maxmaxspeed) $ 30 + speed / 2
     d = speed' / 6
     v = crashSoundVolume speed'
 
@@ -1235,7 +1242,7 @@ printCrashSoundVolumes = do
   putStrLn "        volume"
   putStrLn "speed       123456789"
   putStr $ unlines $ reverse $ [printf "%5.f  %4.1f " s v ++ replicate (round $ v * 10) '*' | (s,v) <- vols]
-  where vols = [(s, crashSoundVolume s) | s <- [0,5..60::Speed]]
+  where vols = [(s, crashSoundVolume s) | s <- [0,5..fromIntegral maxmaxspeed::Speed]]
 
 inGameHighScoreSound = soxPlay False [".1 sin 800 sin 800 delay 0 +.2"]
 
