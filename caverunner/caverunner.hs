@@ -26,9 +26,6 @@
 
 {-# OPTIONS_GHC -Wno-missing-signatures -Wno-unused-imports #-}
 {-# LANGUAGE MultiWayIf, NamedFieldPuns, RecordWildCards, ScopedTypeVariables #-}
--- {-# LANGUAGE RankNTypes #-}
--- {-# LANGUAGE ExistentialQuantification #-}
--- {-# LANGUAGE GADTs #-}
 
 import Control.Applicative
 import Control.Concurrent
@@ -69,7 +66,7 @@ banner = unlines [
   ,"\\___/\\__,_/ |___/\\___/_/   \\__,_/_/ /_/_/ /_/\\___/_/     "
   ]
 
-usage termsize msoxpath sstate@SavedState{..} sscores = (banner++) $ init $ unlines [
+usage termsize msoxpath sstate@SavedState{..} = (banner++) $ init $ unlines [
    "--------------------------------------------------------------------------------" -- 80
   ,"caverunner "++version++" - a small terminal arcade game by Simon Michael."
   ,""
@@ -79,17 +76,17 @@ usage termsize msoxpath sstate@SavedState{..} sscores = (banner++) $ init $ unli
   ,""
   ,"Usage:"
   ,"caverunner.hs                            # install deps, compile, run the game"
-  ,"caverunner [CAVE [SPEED]]                # run the game"
+  ,"caverunner [SPEED [CAVE]]                # run the game"
   ,"caverunner --scores|-s                   # show high scores"
   ,"caverunner --print-cave [CAVE [DEPTH]]   # show the cave on stdout"
   ,"caverunner --help|-h                     # show this help"
   ,""
-  ,"CAVE selects a different cave, from 1 to <highest completed + "++show cavelookahead++">."
-  ,"SPEED sets a different maximum dive speed, from 1 to 60 (default: 15)."
+  ,"SPEED sets a different maximum speed (difficulty), from 1 to 60 (default: 15)."
+  ,"CAVE selects a different cave, from 1 to <highest completed at SPEED + "++show cavelookahead++">."
   ,""
   ,"Your terminal size is "++termsize++". (80x25 terminals are best for competition play.)"
   ,soundMessage msoxpath
-  ,progressMessage sstate sscores
+  ,progressMessage sstate
   ]
 
 soundMessage Nothing = init $ unlines [
@@ -99,21 +96,46 @@ soundMessage Nothing = init $ unlines [
 soundMessage (Just soxpath) =
   "Sound is enabled, using " ++ soxpath ++ ". --no-sound to disable."
       
-progressMessage sstate@SavedState{..} sscores = unlines [
-   unlockedCavesMessage sstate
-  ,"Currently running cave "++show currentcave
+progressMessage sstate@SavedState{..} = unlines [
+  --  unlockedCavesMessage sstate
+   "Currently running cave "++show currentcave
    ++" at speed "++show currentspeed
    ++ "; your best score is " ++ show highscore ++ "."
   ]
   where
-    highscore = maybe 0 hscore $ hsLookup currentcave currentspeed sscores
+    highscore = fromMaybe 0 $ M.lookup (currentspeed,currentcave) highscores
 
 unlockedCavesMessage SavedState{..} =
-  "You have completed " ++ cavecompleted ++ ", and can reach " ++ caves ++ "."
+  "At speed " ++ show currentspeed ++ " you have completed " ++ cavecompleted ++ ", and can reach " ++ caves ++ "."
   where
-    cavecompleted = if highcave==0 then "no caves" else "cave "++show highcave
-    maxcave = highcave + cavelookahead
+    mhighcave = M.lookup currentspeed highcaves
+    cavecompleted = case mhighcave of
+      Nothing -> "no caves"
+      Just c  -> "cave "++show c
+    maxcave = fromMaybe 0 mhighcave + cavelookahead
     caves = if maxcave == 1 then "cave 1" else "caves 1 to " ++ show maxcave
+
+-- Print high scores to stdout.
+printScores = do
+  sstate@SavedState{..} <- logState
+  clearScreen >> setCursorPosition 0 0
+  putStrLn $ banner
+  putStrLn "High scores"
+  putStrLn "-----------"
+  let 
+    highscoresl = reverse $ M.toList highscores
+    speeds = reverse $ nub $ sort $ map (fst.fst) highscoresl
+    highscoresbyspeed = [
+      (speed, [(ca,sc) | ((sp,ca),sc) <- highscoresl, sp==speed])
+      | speed <- speeds
+      ]
+  forM_ highscoresbyspeed $ \(sp, scs) -> do
+    printf "speed %2d:\n" sp
+    putStrLn " cave  score"
+    forM_ scs $ \(ca, sc) -> do
+      printf " %4d  %5d\n" ca sc
+    putStrLn ""
+  putStr $ progressMessage sstate
 
 -------------------------------------------------------------------------------
 -- tweakable parameters
@@ -291,19 +313,20 @@ newGameState firstgame stats w h cavenum maxspeed hs = GameState {
 
 -- long-term/persistent app state
 data SavedState = SavedState {
-   currentcave  :: CaveNum     -- the cave most recently played
-  ,currentspeed :: MaxSpeed    -- the max speed most recently played
-  ,highcave     :: CaveNum     -- the highest cave number completed (0 for none)
+   currentspeed :: MaxSpeed    -- the speed most recently played
+  ,currentcave  :: CaveNum     -- the cave most recently played
+  ,highcaves    :: M.Map MaxSpeed CaveNum  -- the highest cave completed at each speed
+  ,highscores   :: M.Map (MaxSpeed, CaveNum) Score  -- the highest score achieved in each cave at each speed
 } deriving (Read, Show, Eq)
 
 newSavedState = SavedState{
-   currentcave  = defcavenum
-  ,currentspeed = defmaxspeed
-  ,highcave     = 0
+   currentspeed = defmaxspeed
+  ,currentcave  = defcavenum
+  ,highcaves    = M.empty
+  ,highscores   = M.empty
 }
 
--- A single high score for a cave and speed.
--- Fields are ordered most significant first for useful sorting.
+-- A single high score for a cave and speed (for reading old scores file).
 data HighScore = HighScore {
    hcave   :: CaveNum
   ,hspeed  :: MaxSpeed
@@ -322,20 +345,20 @@ newHighScore = HighScore {
 -- - there is at most one score for each cave & speed.
 type HighScores = [HighScore]
 
--- Look up the best score for this cave and speed, if any.
-hsLookup :: CaveNum -> MaxSpeed -> HighScores -> Maybe HighScore
-hsLookup cave speed sscores =
-  maximumMay [hs | hs@HighScore{..} <- sscores, hcave==cave, hspeed==speed]
+-- -- Look up the best score for this cave and speed, if any.
+-- hsLookup :: CaveNum -> MaxSpeed -> HighScores -> Maybe HighScore
+-- hsLookup cave speed sscores =
+--   maximumMay [hs | hs@HighScore{..} <- sscores, hcave==cave, hspeed==speed]
 
--- Add this score to the sorted high scores if it is the first score
--- for the given cave & speed, or if it is better than the old score
--- (and in that case, replace the old score).
-hsUpdate :: HighScore -> HighScores -> HighScores
-hsUpdate new@HighScore{..} scores =
-  case hsLookup hcave hspeed scores of
-    Nothing              -> sort $ new : scores
-    Just old | new > old -> sort $ new : (scores \\ [old])
-    _                    -> scores
+-- -- Add this score to the sorted high scores if it is the first score
+-- -- for the given cave & speed, or if it is better than the old score
+-- -- (and in that case, replace the old score).
+-- hsUpdate :: HighScore -> HighScores -> HighScores
+-- hsUpdate new@HighScore{..} scores =
+--   case hsLookup hcave hspeed scores of
+--     Nothing              -> sort $ new : scores
+--     Just old | new > old -> sort $ new : (scores \\ [old])
+--     _                    -> scores
 
 -------------------------------------------------------------------------------
 -- persistence
@@ -373,22 +396,43 @@ readLogLine :: String -> LoggedEvent
 readLogLine s = fromMaybe (Other s) $ fromFormat3 <$> readMay s <|> readMay s
   
 -- Calculate app state, high scores from events.
-eventsToAppState :: [LoggedEvent] -> (SavedState, HighScores)
-eventsToAppState evs = (st, hs)
+eventsToAppState :: [LoggedEvent] -> SavedState
+eventsToAppState evs = newSavedState{
+    currentspeed = lastspeed
+  , currentcave  = lastcave
+  , highcaves    = M.fromList highcaves
+  , highscores   = M.fromList highscores
+  }
   where
-    hc = maximumDef 0 [c | Compl _ c _ _ _ _ <- evs]
-    st = case lastMay evs of
-           Just (Crash _ sp ca _ _ _) -> newSavedState{currentcave=ca,currentspeed=sp,highcave=hc}
-           Just (Compl _ sp ca _ _ _) -> newSavedState{currentcave=ca,currentspeed=sp,highcave=hc}
-           _ -> newSavedState
-    hs = concatMap highScoreFromEvent evs
-      where
-        highScoreFromEvent (Crash _ sp ca _ _ sc) = [newHighScore{hcave=ca,hspeed=sp,hscore=sc}]
-        highScoreFromEvent (Compl _ sp ca _ _ sc) = [newHighScore{hcave=ca,hspeed=sp,hscore=sc}]
-        highScoreFromEvent _ = []
+    (lastspeed, lastcave) = case lastMay evs of
+           Just (Crash _ sp ca _ _ _) -> (sp, ca)
+           Just (Compl _ sp ca _ _ _) -> (sp, ca)
+           _ -> (defmaxspeed, defcavenum)
+    highcaves = 
+      map (maximumBy (comparing snd)) $ 
+      groupBy (\a b -> fst a == fst b) $ 
+      nub $ sort $
+      [(sp, ca) | Compl _ sp ca _ _ _ <- evs]
+    highscores =
+      map (maximumBy (comparing snd)) $ 
+      groupBy (\a b -> fst a == fst b) $ 
+      nub $ sort $ 
+      catMaybes $ map eventScore evs
+
+savedStateUpdate speed cave score sstate@SavedState{..} =
+  sstate{
+     currentspeed = speed
+    ,currentcave  = cave
+    ,highcaves    = M.insertWith max speed cave highcaves
+    ,highscores   = M.insertWith max (speed,cave) score highscores
+    }
+
+eventScore (Crash _ sp ca _ _ sc) = Just ((sp,ca), sc)
+eventScore (Compl _ sp ca _ _ sc) = Just ((sp,ca), sc)
+eventScore _ = Nothing
 
 -- Read current app state from event log.
-logState :: IO (SavedState, HighScores)
+logState :: IO SavedState
 logState = logRead <&> eventsToAppState
 
 -- Get the file path of the event log, which contains chronologically ordered events,
@@ -497,27 +541,29 @@ load filename = do
 main = do
   args <- getArgs
   logMigrate
-  (sstate@SavedState{..}, sscores) <- logState
-  when ("-h" `elem` args || "--help" `elem` args) $ exitWithUsage sstate sscores
+  sstate@SavedState{..} <- logState
+  when ("-h" `elem` args || "--help" `elem` args) $ exitWithUsage sstate
   let
     (flags, args') = partition ("-" `isPrefixOf`) args
-    (cavenum, speed, hasspeedarg) =
+    (speed, cavenum, hascavearg) =
       case args' of
-        []    -> (currentcave, currentspeed, False)
-        [c]   -> (checkcave $ readDef (caveerr c) c, currentspeed, False)
-        [c,s] -> (checkcave $ readDef (caveerr c) c, checkspeed $ readDef (speederr s) s, True)
+        []    -> (currentspeed, currentcave, False)
+        [s]   -> (checkspeed $ readDef (speederr s) s, currentcave, False)
+        [s,c] -> (sp, checkcave sp $ readDef (caveerr c) c, True)
+          where sp = checkspeed $ readDef (speederr s) s
         _     -> err "too many arguments, please see --help"
         where
-          caveerr a = err $ "CAVE should be a natural number (received "++a++"), see --help)"
-          checkcave c
+          checkspeed s = if s >= 1 && s <= 60 then s else speederr $ show s
+          speederr a = err $ "SPEED should be 1-60 (received "++a++"), see --help)"
+          checkcave s c
             | c <= highcave + cavelookahead = c
             | otherwise = err $ init $ unlines [
                  ""
-                ,"To reach cave "++show c ++ ", you must complete at least cave "++ show (c-cavelookahead) ++ "."
+                ,"To reach cave "++show c ++ " at speed "++show s ++ ", you must complete at least cave "++ show (c-cavelookahead) ++ "."
                 ,unlockedCavesMessage sstate
                 ]
-          speederr a = err $ "SPEED should be 1-60 (received "++a++"), see --help)"
-          checkspeed s = if s >= 1 && s <= 60 then s else speederr $ show s
+            where highcave = fromMaybe 0 $ M.lookup s highcaves
+          caveerr a = err $ "CAVE should be a natural number (received "++a++"), see --help)"
 
   cavenum `seq` if
     --  | "--print-speed-sound-volume" `elem` flags -> printSpeedSoundVolumes
@@ -525,28 +571,12 @@ main = do
     | "-s" `elem` args || "--scores" `elem` flags -> printScores
 
     | "--print-cave" `elem` flags ->
-      let mdepth = if hasspeedarg then Just speed else Nothing
+      let mdepth = if hascavearg then Just cavenum else Nothing
       in printCave cavenum mdepth
 
     | otherwise -> do
       let sstate' = sstate{ currentcave=cavenum, currentspeed=speed }
-      playGames True ("--stats" `elem` flags) cavenum (fromIntegral speed) sstate' sscores
-
--- Print high scores to stdout.
-printScores = do
-  (_state@SavedState{..}, scores) <- logState
-  putStrLn "High scores"
-  putStrLn "-----------"
-  let scoresbyspeed =
-        reverse [(sp, filter ((==sp).hspeed) scores) | sp <- nub $ sort $ map hspeed scores]
-  forM_ scoresbyspeed $ \(sp, scs) -> do
-    let
-      hs = maximumBy (comparing hcave) $ filter ((==sp).hspeed) scs     -- XXX are these working right ?
-      completed = nub $ sort $ map hcave $ filter ((==462).hscore) scs  -- XXX
-    printf "speed %2d:" sp
-    printf " highest cave %2d, score %3d" (hcave hs) (hscore hs)
-    if null completed then return () else printf ", completed %s" (unwords $ map show completed)
-    putStrLn ""
+      playGames True ("--stats" `elem` flags) (fromIntegral speed) cavenum sstate'
 
 -- Generate the cave just like the game would, printing each line to stdout.
 -- Optionally, limit to just the first N lines.
@@ -576,11 +606,11 @@ printCave cavenum mdepth = do
 -- updating save files and/or advancing to next cave when appropriate.
 -- The first arguments specify if this is the first game of a session and
 -- if onscreen dev stats should be displayed.
-playGames :: Bool -> Bool -> CaveNum -> MaxSpeed -> SavedState -> HighScores -> IO ()
-playGames firstgame showstats cavenum maxspeed sstate@SavedState{..} sscores = do
+playGames :: Bool -> Bool -> MaxSpeed -> CaveNum -> SavedState -> IO ()
+playGames firstgame showstats maxspeed cavenum sstate@SavedState{..} = do
   (screenw,screenh) <- displaySize  -- use full screen height for each game (apparently last line is unusable on windows ? surely it's fine)
   let
-    highscore = maybe 0 hscore $ hsLookup cavenum maxspeed sscores
+    highscore = fromMaybe 0 $ M.lookup (maxspeed, cavenum) highscores
     game = newGame firstgame showstats screenh cavenum maxspeed highscore
 
   -- run one game. Will exit if terminal is too small.
@@ -589,24 +619,21 @@ playGames firstgame showstats cavenum maxspeed sstate@SavedState{..} sscores = d
   -- game ended by crashing, reaching cave end, or quitting with q. (Ctrl-c is not caught here.)
   -- if the end was reached, advance to next cave and maybe update highest cave completed
   let
-    (cavenum', highcave', evcons)
-      | playerAtEnd g = (cavenum+1, max highcave cavenum, Compl)
-      | otherwise     = (cavenum, highcave, Crash)
-    sstate' = sstate{
-       currentcave  = cavenum'
-      ,highcave     = highcave'
-      }
-    sscores' = hsUpdate newHighScore{hcave=cavenum,hspeed=maxspeed,hscore=score} sscores
-  -- persistence: log an end event
+    (cavenum', evcons)
+      | playerAtEnd g = (cavenum+1, Compl)
+      | otherwise     = (cavenum,   Crash)
+  -- persistent state: log an end event
   t <- getCurrentTime
   logAppend [evcons t maxspeed cavenum (playerDepth g) playerx score]
+  -- in-memory state: update
+  let sstate' = savedStateUpdate maxspeed cavenum' score sstate
 
   -- play again, or exit the app
   if not exit
   then 
-    playGames False showstats cavenum' maxspeed sstate' sscores'
+    playGames False showstats maxspeed cavenum' sstate'
   else do
-    putStr $ progressMessage sstate' sscores'
+    putStr $ progressMessage sstate'
     putStrLn ""
     printScores
     when soundEnabled quitSound
@@ -935,12 +962,11 @@ pp = pprint
 pprintc :: Show a => a -> IO ()
 pprintc = PrettySimple.pPrint
 
-exitWithUsage sstate sscores = do
-  clearScreen
-  setCursorPosition 0 0
+exitWithUsage sstate = do
+  clearScreen >> setCursorPosition 0 0
   termsize <- displaySizeStrSafe
   msox <- findExecutable "sox"
-  putStr $ usage termsize msox sstate sscores
+  putStr $ usage termsize msox sstate
   exitSuccess
 
 displaySizeStrSafe = handle (\(_::ATGException) -> return "unknown") $ do
