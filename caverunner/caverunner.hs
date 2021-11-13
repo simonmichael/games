@@ -5,6 +5,7 @@
   --package ansi-terminal-game
   --package containers
   --package directory
+  --package extra
   --package filepath
   --package pretty-show
   --package pretty-simple
@@ -32,9 +33,11 @@ import Control.Concurrent
 import Control.Exception
 import Control.Monad
 import Data.Bifunctor (first)
+import Data.Char (chr,ord,isSpace)
 import Data.Function (fix)
 import Data.Functor ((<&>))
 import Data.List
+import Data.List.Extra
 import qualified Data.Map as M
 import Data.Maybe
 import Data.Ord
@@ -235,8 +238,41 @@ type GameCol = Column
 type CaveRow = Row
 type CaveCol = Column
 
--- One line within a cave, with its left/right wall positions.
-data CaveLine = CaveLine GameCol GameCol deriving (Show)
+-- One line within a cave, with its depth and left/right wall positions.
+data CaveLine = CaveLine CaveRow CaveCol CaveCol deriving (Show)
+
+insertOrUpdate :: Ord k => v -> (v -> v) -> k -> M.Map k v -> M.Map k v
+insertOrUpdate newval updatefn key = M.alter (maybe (Just newval) (Just . updatefn)) key
+
+-- Crash sites within a row, and how many times at each one.
+type RowCrashes = M.Map CaveCol Int
+
+-- Make a RowCrashes containing one new crash site.
+newRowCrash :: CaveCol -> RowCrashes
+newRowCrash col = M.fromList [(col, 1)]
+
+-- Add a new crash site to a RowCrashes.
+rowCrashesAdd :: CaveCol -> RowCrashes -> RowCrashes
+rowCrashesAdd col = insertOrUpdate 1 (+1) col
+
+-- Crash sites within a cave.
+type CaveCrashes = M.Map CaveRow RowCrashes
+
+-- Make a CaveCrashes containing one new crash site.
+newCaveCrash :: CaveRow -> CaveCol -> CaveCrashes
+newCaveCrash row col = M.fromList [(row, newRowCrash col)]
+
+-- Add a new crash site to a CaveCrashes.
+caveCrashesAdd :: CaveRow -> CaveCol -> CaveCrashes -> CaveCrashes
+caveCrashesAdd row col = insertOrUpdate (newRowCrash col) (rowCrashesAdd col) row
+
+-- Crash sites within all caves.
+type AllCrashes = M.Map CaveNum CaveCrashes
+
+-- Add a new crash site to an AllCrashes.
+allCrashesAdd :: CaveNum -> CaveRow -> CaveCol -> AllCrashes -> AllCrashes
+allCrashesAdd cave row col = insertOrUpdate (newCaveCrash row col) (caveCrashesAdd row col) cave
+
 
 -- A game scene/mode. Some scenes may progress through numbered phases starting at 1.
 data Scene =
@@ -272,6 +308,7 @@ data GameState = GameState {
   ,randomgen       :: StdGen
   ,cavesteps       :: Int        -- how many cave lines have been generated since game start (should be Integer but I can't be bothered)
   ,cavelines       :: [CaveLine] -- recent cave lines, for display; newest/bottom-most first
+  ,cavecrashes     :: CaveCrashes -- past crashes in this cave, for display
   ,cavewidth       :: Width      -- current cave width (inner space between the walls)
   ,cavecenter      :: GameCol    -- current x coordinate in game area of the cave's horizontal midpoint
   ,cavespeed       :: Speed      -- current speed of player dive/cave scroll in lines/s, must be <= fps
@@ -285,7 +322,7 @@ data GameState = GameState {
   }
   deriving (Show)
 
-newGameState firstgame stats w h cavenum maxspeed hs = GameState {
+newGameState firstgame stats w h cavenum maxspeed hs crashes = GameState {
    stats           = stats
   ,firstgame       = firstgame
   ,controlspressed = False
@@ -307,6 +344,7 @@ newGameState firstgame stats w h cavenum maxspeed hs = GameState {
   ,randomgen       = mkStdGen cavenum
   ,cavesteps       = 0
   ,cavelines       = []
+  ,cavecrashes     = crashes
   ,cavewidth       = cavewidthinit
   ,cavecenter      = half w
   ,cavespeed       = initspeed
@@ -493,6 +531,7 @@ data SavedState = SavedState {
   ,currentcave  :: CaveNum                          -- the current cave being played at this speed
   ,highcaves    :: M.Map MaxSpeed CaveNum           -- the highest cave completed at each speed
   ,highscores   :: M.Map (MaxSpeed, CaveNum) Score  -- the highest score achieved in each cave at each speed
+  ,allcrashes   :: AllCrashes
 } deriving (Read, Show, Eq)
 
 newSavedState = SavedState{
@@ -500,6 +539,7 @@ newSavedState = SavedState{
   ,currentcave  = defcavenum
   ,highcaves    = M.empty
   ,highscores   = M.empty
+  ,allcrashes   = M.empty
 }
 
 -- Calculate app saved state from events.
@@ -509,6 +549,7 @@ eventsToSavedState evs = newSavedState{
   , currentcave  = curcave
   , highcaves    = M.fromList highcaves
   , highscores   = M.fromList highscores
+  , allcrashes   = M.fromList allcrashes
   }
   where
     (curspeed, curcave) = case lastMay evs of
@@ -531,6 +572,13 @@ eventsToSavedState evs = newSavedState{
         eventScore (Crash _ sp ca _ _ sc) = Just ((sp,ca), sc)
         eventScore (Compl _ sp ca _ _ sc) = Just ((sp,ca), sc)
         eventScore _ = Nothing
+    allcrashes =
+      map (\(ca,rcs) -> (ca, M.fromList $ map (\(r,cs) -> (r, M.fromList [ (d, length ds) | ds@(d:_) <- group cs])) $ groupSort rcs)) $
+      groupSort $
+      concatMap eventCrash evs
+      where
+        eventCrash (Crash _ _ ca r c _) = [(ca, (r,c))]
+        eventCrash _ = []
 
 -- Read the app's persistent state from the log file.
 getSavedState :: IO SavedState
@@ -538,19 +586,19 @@ getSavedState = logRead <&> eventsToSavedState
 
 -- Update the in-memory saved state from the last run as needed
 -- (maybe a new high score or high cave).
--- The next cave number is also provided to help set the latter. (XXX wrong ?)
-savedStateUpdate :: MaxSpeed -> CaveNum -> Score -> CaveNum -> SavedState -> SavedState
-savedStateUpdate speed cave score nextcave sstate@SavedState{..} =
+-- The next cave number is also provided to help set the latter. (XXX ?)
+savedStateUpdate :: MaxSpeed -> CaveNum -> Score -> CaveNum -> CaveRow -> CaveCol -> SavedState -> SavedState
+savedStateUpdate speed cave score nextcave row col sstate@SavedState{..} =
   sstate{
      highscores   = M.insertWith max (speed, cave) score highscores
     ,highcaves    = M.insertWith max speed nextcave highcaves
+    ,allcrashes   = allCrashesAdd cave row col allcrashes
     }
 
 -- What's the saved current cave at the given speed ?
 savedStateCurrentCaveAt :: MaxSpeed -> SavedState -> CaveNum
 savedStateCurrentCaveAt speed sstate@SavedState{..} =
   maybe defcavenum (+1) $ M.lookup speed highcaves
-
 
 -------------------------------------------------------------------------------
 -- app logic
@@ -562,18 +610,19 @@ main = do
   when ("-h" `elem` args || "--help" `elem` args) $ exitWithUsage sstate
   let
     (flags, args') = partition ("-" `isPrefixOf`) args
-    (speed, cavenum, hascavearg) =
+    (speed, cavenum, hasspeedarg, hascavearg) =
       case args' of
-        []    -> (currentspeed, currentcave, False)
-        [s]   -> (checkspeed $ readDef (speederr s) s, savedStateCurrentCaveAt sp sstate, False)
+        []    -> (currentspeed, currentcave, False, False)
+        [s]   -> (checkspeed $ readDef (speederr s) s, savedStateCurrentCaveAt sp sstate, True, False)
           where sp = checkspeed $ readDef (speederr s) s
-        [s,c] -> (sp, checkcave sp $ readDef (caveerr c) c, True)
+        [s,c] -> (sp, checkcave sp $ readDef (caveerr c) c, True, True)
           where sp = checkspeed $ readDef (speederr s) s
         _     -> err "too many arguments, please see --help"
         where
           checkspeed s = if s >= 1 && s <= maxmaxspeed then s else speederr $ show s
           speederr a = err $ "SPEED should be 1-"++show maxmaxspeed++" (received "++a++"), see --help)"
           checkcave s c
+            | "--print-cave" `elem` flags = c
             | c <= highcave + cavelookahead = c
             | otherwise = err $ init $ unlines [
                  ""
@@ -589,8 +638,10 @@ main = do
     | "-s" `elem` args || "--scores" `elem` flags -> printScores
 
     | "--print-cave" `elem` flags ->
-      let mdepth = if hascavearg then Just cavenum else Nothing
-      in printCave cavenum mdepth
+      let 
+        mdepth = if hascavearg then Just cavenum else Nothing
+        cave = if hasspeedarg then speed else currentcave
+      in printCave cave mdepth sstate
 
     | otherwise -> do
       let sstate' = sstate{ currentcave=cavenum, currentspeed=speed }
@@ -598,9 +649,11 @@ main = do
 
 -- Generate the cave just like the game would, printing each line to stdout.
 -- Optionally, limit to just the first N lines.
-printCave cavenum mdepth = do
+-- Does not show crashes currently.
+printCave cavenum mdepth SavedState{allcrashes} = do
+  let crashes = fromMaybe M.empty $ M.lookup cavenum allcrashes
   putStrLn $ progname ++ " cave "++show cavenum
-  go mdepth $ newGameState False False gamewidth 25 cavenum 15 0
+  go mdepth $ newGameState False False gamewidth 25 cavenum 15 0 crashes
   where
     go (Just 0) _ = return ()
     go mremaining g@GameState{..} =
@@ -611,7 +664,16 @@ printCave cavenum mdepth = do
            randomgen',
            cavecenter',
            cavelines'@(l:_)) = stepCave g
-        putStrLn $ showCaveLineNumbered gamewidth l cavesteps'
+          s = showCaveLineNumbered gamewidth l cavesteps'
+          s' = foldl' drawcrash s rowcrashes
+            where
+              rowcrashes = maybe [] M.toList $ M.lookup cavesteps' cavecrashes
+              drawcrash s (col,num) 
+                | isSpace c = s
+                | otherwise = take (col-1) s ++ [c] ++ drop col s
+                where 
+                  c = crashChar num
+        putStrLn s'
         go (fmap (subtract 1) mremaining)
            g{randomgen    = randomgen'
             ,cavesteps    = cavesteps'
@@ -629,7 +691,8 @@ playGames firstgame showstats sstate@SavedState{..} = do
   (screenw,screenh) <- displaySize  -- use full screen height for each game (apparently last line is unusable on windows ? surely it's fine)
   let
     highscore = fromMaybe 0 $ M.lookup (currentspeed, currentcave) highscores
-    game = newGame firstgame showstats screenh currentspeed currentcave highscore
+    crashes = fromMaybe M.empty $ M.lookup currentcave allcrashes
+    game = newGame firstgame showstats screenh currentspeed currentcave highscore crashes
 
   -- run one game. Will exit if terminal is too small.
   g@GameState{scene,score,exit,playerx} <- Terminal.Game.playGameS game
@@ -653,7 +716,7 @@ playGames firstgame showstats sstate@SavedState{..} = do
           | currentcave < maxcavenum  = (currentcave+1, currentspeed)
           | otherwise                 = (1,             currentspeed+5)
         -- update high score/high cave if appropriate (XXX needs next cave number, wrong ?)
-        sstate1 = savedStateUpdate currentspeed currentcave score nextcave sstate
+        sstate1 = savedStateUpdate currentspeed currentcave score nextcave (playerDepth g) playerx sstate
       return sstate1{currentcave=nextcave, currentspeed=nextspeed}
 
   -- play again, or exit the app
@@ -667,12 +730,12 @@ playGames firstgame showstats sstate@SavedState{..} = do
     when soundEnabled quitSound
 
 -- Initialise a new game (a cave run).
-newGame :: Bool -> Bool -> Height -> MaxSpeed -> CaveNum -> Score -> Game GameState
-newGame firstgame stats gameh maxspeed cavenum hs =
+newGame :: Bool -> Bool -> Height -> MaxSpeed -> CaveNum -> Score -> CaveCrashes -> Game GameState
+newGame firstgame stats gameh maxspeed cavenum hs crashes =
   Game { gScreenWidth   = gamewidth, -- width used (and required) for drawing (a constant 80 for repeatable caves)
          gScreenHeight  = gameh,     -- height used for drawing (the screen height)
          gFPS           = fps,       -- target frames/game ticks per second
-         gInitState     = newGameState firstgame stats gamewidth gameh cavenum maxspeed hs,
+         gInitState     = newGameState firstgame stats gamewidth gameh cavenum maxspeed hs crashes,
          gLogicFunction = step',
          gDrawFunction  = draw,
          gQuitFunction  = timeToQuit
@@ -877,7 +940,7 @@ stepCave GameState{..} =
 
     -- extend the cave, discarding old lines,
     -- except for an extra screenful that might be needed for speedpan
-    cavelines' = take (gameh * 2) $ CaveLine l r : cavelines
+    cavelines' = take (gameh * 2) $ CaveLine cavesteps' l r : cavelines
       where
         (l,r) = caveWalls cavecenter' cavewidth'
 
@@ -944,21 +1007,21 @@ playerLineBelow g@GameState{..} = cavelines `atMay` (playerHeight g + 1)
 -- Has player hit a wall ?
 playerCrashed g@GameState{..} =
   case playerLine g of
-    Nothing             -> False
-    Just (CaveLine l r) -> playerx <= l || playerx > r
+    Nothing               -> False
+    Just (CaveLine _ l r) -> playerx <= l || playerx > r
 
 -- How close is player flying to a wall ?
 -- Actually, checks the line below (ahead) of the player, to sync better with sound effects.
 playerWallDistance :: GameState -> Maybe Width
 playerWallDistance g@GameState{..} =
   case playerLineBelow g of
-    Nothing             -> Nothing
-    Just (CaveLine l r) -> Just $ min (max 0 $ playerx-l) (max 0 $ r+1-playerx)
+    Nothing               -> Nothing
+    Just (CaveLine _ l r) -> Just $ min (max 0 $ playerx-l) (max 0 $ r+1-playerx)
 
 -- Has player reached the cave bottom (a zero-width line) ?
 playerAtEnd g = case playerLine g of
-  Just (CaveLine l r) | r <= l -> True
-  _                            -> False
+  Just (CaveLine _ l r) | r <= l -> True
+  _                              -> False
 
 -------------------------------------------------------------------------------
 -- utilities
@@ -1066,14 +1129,29 @@ draw g@GameState{..} =
 
 drawCave GameState{..} =
   vcat $
-  map (drawCaveLine gamew) $
+  map (drawCaveLine gamew cavecrashes) $
   reverse $
   take gameh $
   drop speedpan cavelines
 
-drawCaveLine gamew line = stringPlane $ showCaveLine gamew line
+drawCaveLine gamew cavecrashes line@(CaveLine d _ _) = 
+  mergePlanes
+    (stringPlane $ showCaveLine gamew line)
+    [((1,col), drawCrash num) | (col,num) <- crashes]
+  where
+    crashes :: [(CaveCol, Int)]
+    crashes = maybe [] M.toList $ M.lookup d cavecrashes
 
-showCaveLine gamew (CaveLine left right) =
+drawCrash num = stringPlaneTrans ' ' [crashChar num] #bold -- #color hue Vivid 
+
+crashChar :: Int -> Char
+crashChar n 
+  | n < 1     = ' '
+  | n == 1    = '*'
+  | n <= 9    = chr $ ord '0' + n
+  | otherwise = 'X'
+
+showCaveLine gamew (CaveLine depth left right) =
   concat [
     replicate left wallchar
    ,replicate (right - left) spacechar

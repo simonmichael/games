@@ -6,6 +6,7 @@ PACKAGES=\
   --package ansi-terminal-game\
   --package containers\
   --package directory\
+  --package extra\
   --package filepath\
   --package pretty-show\
   --package pretty-simple\
