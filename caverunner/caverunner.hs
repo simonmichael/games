@@ -126,7 +126,7 @@ printScores = do
     highscoresl = reverse $ M.toList highscores
     speeds = reverse $ nub $ sort $ map (fst.fst) highscoresl
     scores = nub $ sort $ map snd highscoresl
-    scorew = length $ show (maximum scores)
+    scorew = length $ show (maximumDef 0 scores)
     highscoresbyspeed = [
       (speed, [(ca,sc) | ((sp,ca),sc) <- highscoresl, sp==speed])
       | speed <- speeds
@@ -423,12 +423,14 @@ eventsToAppState evs = newSavedState{
            Just (Compl _ sp ca _ _ _) -> (sp, ca)
            _ -> (defmaxspeed, defcavenum)
     highcaves = 
-      map (maximumBy (comparing snd)) $ 
+      catMaybes $
+      map (maximumByMay (comparing snd)) $
       groupBy (\a b -> fst a == fst b) $ 
       nub $ sort $
       [(sp, ca) | Compl _ sp ca _ _ _ <- evs]
     highscores =
-      map (maximumBy (comparing snd)) $ 
+      catMaybes $
+      map (maximumByMay (comparing snd)) $
       groupBy (\a b -> fst a == fst b) $ 
       nub $ sort $ 
       catMaybes $ map eventScore evs
