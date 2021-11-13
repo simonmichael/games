@@ -67,9 +67,9 @@ banner = unlines [
   ]
 
 usage termsize msoxpath sstate@SavedState{..} = (banner++) $ init $ unlines [
-   "--------------------------------------------------------------------------------" -- 80
+   ""
   ,"caverunner "++version++" - a small terminal arcade game by Simon Michael."
-  ,""
+  ,"--------------------------------------------------------------------------------" -- 80
   ,"Thrillseeking drone pilots dive the solar system's caves, competing for glory!"
   ,"Each cave and speed has a high score. Reaching the bottom unlocks more caves."
   ,"How fast, how deep, how far can you go ?"
@@ -81,7 +81,7 @@ usage termsize msoxpath sstate@SavedState{..} = (banner++) $ init $ unlines [
   ,"caverunner --print-cave [CAVE [DEPTH]]   # show the cave on stdout"
   ,"caverunner --help|-h                     # show this help"
   ,""
-  ,"SPEED sets a different maximum speed (difficulty), from 1 to "++show maxmaxspeed++" (default: "++show defmaxspeed++")."
+  ,"SPEED sets a different maximum speed (difficulty), from 1 to "++show maxmaxspeed++" (default "++show defmaxspeed++")."
   ,"CAVE selects a different cave, 1 to <highest completed at SPEED + "++show cavelookahead++"> (max "++show maxcavenum++")."
   ,""
   ,"Your terminal size is "++termsize++". (80x25 terminals are best for competition play.)"
@@ -98,8 +98,8 @@ soundMessage (Just soxpath) =
       
 progressMessage sstate@SavedState{..} = unlines [
   --  unlockedCavesMessage sstate
-   "Currently running cave "++show currentcave
-   ++" at speed "++show currentspeed
+   "Currently playing at speed "++show currentspeed
+   ++" (cave "++show currentcave++")"
    ++ "; your best score is " ++ show highscore ++ "."
   ]
   where
@@ -120,21 +120,31 @@ printScores = do
   sstate@SavedState{..} <- logState
   clearScreen >> setCursorPosition 0 0
   putStrLn $ banner
-  putStrLn "High scores"
+  putStrLn "HIGH SCORES"
   putStrLn "-----------"
   let 
     highscoresl = reverse $ M.toList highscores
     speeds = reverse $ nub $ sort $ map (fst.fst) highscoresl
+    scores = nub $ sort $ map snd highscoresl
+    scorew = length $ show (maximum scores)
     highscoresbyspeed = [
       (speed, [(ca,sc) | ((sp,ca),sc) <- highscoresl, sp==speed])
       | speed <- speeds
       ]
-  forM_ highscoresbyspeed $ \(sp, scs) -> do
-    printf "speed %2d:\n" sp
-    putStrLn " cave  score"
-    forM_ scs $ \(ca, sc) -> do
-      printf " %4d  %5d\n" ca sc
-    putStrLn ""
+
+  putStr "   cave:"
+  forM_ [1..maxcavenum] $ \ca -> printf (" %"++show scorew++"d") ca
+  putStr "\n"
+  putStrLn "speed:"
+  forM_ (reverse [5,10..maxmaxspeed]) $ \sp -> do
+    let mscs = lookup sp highscoresbyspeed
+    when (sp >= defmaxspeed || isJust mscs) $ do
+      printf "%s %2d    " (if sp == currentspeed then ">" else " ") sp
+      forM_ [1..maxcavenum] $ \ca -> do
+        let msc = mscs >>= lookup ca
+        putStr $ maybe (replicate scorew ' '++"-") (printf (" %"++show scorew++"d")) msc
+      putStr "\n"
+  putStr "\n"
   putStr $ progressMessage sstate
 
 -------------------------------------------------------------------------------
