@@ -78,11 +78,11 @@ usage termsize msoxpath sstate@SavedState{..} = (banner++) $ init $ unlines [
   ,"How fast, how deep, how far can you go ?"
   ,""
   ,"Usage:"
-  ,"caverunner.hs                            # install deps, compile, run the game"
-  ,"caverunner [SPEED [CAVE]]                # run the game"
-  ,"caverunner --scores|-s                   # show high scores"
-  ,"caverunner --print-cave [CAVE [DEPTH]]   # show the cave on stdout"
-  ,"caverunner --help|-h                     # show this help"
+  ,"caverunner.hs                         # install deps, compile, run the game"
+  ,"caverunner [SPEED [CAVE]]             # run the game"
+  ,"caverunner -s|--scores                # show high scores"
+  ,"caverunner -p|--print [CAVE [DEPTH]]  # show the cave on stdout"
+  ,"caverunner -h|--help                  # show this help"
   ,""
   ,"SPEED sets a different maximum speed (difficulty), from 1 to "++show maxmaxspeed++" (default "++show defmaxspeed++")."
   ,"CAVE selects a different cave, 1 to <highest completed at SPEED + "++show cavelookahead++"> (max "++show maxcavenum++")."
@@ -607,9 +607,9 @@ main = do
   logMigrate
   sstate@SavedState{..} <- getSavedState
   args <- getArgs
-  when ("-h" `elem` args || "--help" `elem` args) $ exitWithUsage sstate
+  let (flags, args') = partition ("-" `isPrefixOf`) args
+  when ("-h" `elem` flags || "--help" `elem` flags) $ exitWithUsage sstate
   let
-    (flags, args') = partition ("-" `isPrefixOf`) args
     (speed, cavenum, hasspeedarg, hascavearg) =
       case args' of
         []    -> (currentspeed, currentcave, False, False)
@@ -622,7 +622,7 @@ main = do
           checkspeed s = if s >= 1 && s <= maxmaxspeed then s else speederr $ show s
           speederr a = err $ "SPEED should be 1-"++show maxmaxspeed++" (received "++a++"), see --help)"
           checkcave s c
-            | "--print-cave" `elem` flags = c
+            | "-p" `elem` flags || "--print-cave" `elem` flags = c
             | c <= highcave + cavelookahead = c
             | otherwise = err $ init $ unlines [
                  ""
@@ -635,9 +635,9 @@ main = do
   cavenum `seq` if
     --  | "--print-speed-sound-volume" `elem` flags -> printSpeedSoundVolumes
 
-    | "-s" `elem` args || "--scores" `elem` flags -> printScores
+    | "-s" `elem` flags || "--scores" `elem` flags -> printScores
 
-    | "--print-cave" `elem` flags ->
+    | "-p" `elem` flags || "--print-cave" `elem` flags ->
       let 
         mdepth = if hascavearg then Just cavenum else Nothing
         cave = if hasspeedarg then speed else currentcave
