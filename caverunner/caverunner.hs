@@ -118,8 +118,9 @@ unlockedCavesMessage SavedState{..} =
 -- Print high scores to stdout.
 printScores = do
   sstate@SavedState{..} <- getSavedState
-  clearScreen >> setCursorPosition 0 0
-  putStrLn $ banner
+  clearScreen
+  -- setCursorPosition 0 0  -- omit for now, allows entr to scroll output
+  putStrLn banner
   putStrLn "HIGH SCORES"
   putStrLn "-----------"
   let 
@@ -444,9 +445,9 @@ data LoggedEvent =
 -- Crash 2021-11-13 01:01:48.73835 UTC 15 1 1 39 1
 -- Compl 2021-11-13 01:02:15.612641 UTC 15 1 3 41 153
 -- -> 
--- CR1 2021-11-13 01:00:35 UTC 15  1  Crash 000 040     0
--- CR1 2021-11-13 01:01:48 UTC 15  1  Crash 001 039     1
--- CR1 2021-11-13 01:02:15 UTC 15  1  Compl 003 041   153
+-- CR1 2021-11-13 01:00:35 UTC Crash 15  1  000 040    0
+-- CR1 2021-11-13 01:01:48 UTC Crash 15  1  001 039    1
+-- CR1 2021-11-13 01:02:15 UTC Compl 15  1  003 041  153
 
 -- Get the file path of the event log, which contains chronologically ordered events,
 -- one per line, from which we can calculate state and statistics.
@@ -504,15 +505,15 @@ newSavedState = SavedState{
 -- Calculate app saved state from events.
 eventsToSavedState :: [LoggedEvent] -> SavedState
 eventsToSavedState evs = newSavedState{
-    currentspeed = lastspeed
-  , currentcave  = lastcave
+    currentspeed = curspeed
+  , currentcave  = curcave
   , highcaves    = M.fromList highcaves
   , highscores   = M.fromList highscores
   }
   where
-    (lastspeed, lastcave) = case lastMay evs of
+    (curspeed, curcave) = case lastMay evs of
            Just (Crash _ sp ca _ _ _) -> (sp, ca)
-           Just (Compl _ sp ca _ _ _) -> (sp, ca)
+           Just (Compl _ sp ca _ _ _) -> (sp, ca+1)
            _ -> (defmaxspeed, defcavenum)
     highcaves = 
       catMaybes $
@@ -535,13 +536,12 @@ eventsToSavedState evs = newSavedState{
 getSavedState :: IO SavedState
 getSavedState = logRead <&> eventsToSavedState
 
--- Update the in-memory copy of persistent state with the last run's 
--- speed, cave number, score, and the cave number to be played next.
-savedStateUpdate speed lastcave score nextcave sstate@SavedState{..} =
+-- Update the in-memory saved state from the last run as needed
+-- (maybe a new high score or high cave).
+-- The next cave number is also provided to help set the latter. (XXX wrong ?)
+savedStateUpdate speed cave score nextcave sstate@SavedState{..} =
   sstate{
-     currentspeed = speed
-    ,currentcave  = nextcave
-    ,highscores   = M.insertWith max (speed, lastcave) score highscores
+     highscores   = M.insertWith max (speed, cave) score highscores
     ,highcaves    = M.insertWith max speed nextcave highcaves
     }
 
@@ -586,7 +586,7 @@ main = do
 
     | otherwise -> do
       let sstate' = sstate{ currentcave=cavenum, currentspeed=speed }
-      playGames True ("--stats" `elem` flags) (fromIntegral speed) cavenum sstate'
+      playGames True ("--stats" `elem` flags) sstate'
 
 -- Generate the cave just like the game would, printing each line to stdout.
 -- Optionally, limit to just the first N lines.
@@ -616,35 +616,42 @@ printCave cavenum mdepth = do
 -- updating save files and/or advancing to next cave when appropriate.
 -- The first arguments specify if this is the first game of a session and
 -- if onscreen dev stats should be displayed.
-playGames :: Bool -> Bool -> MaxSpeed -> CaveNum -> SavedState -> IO ()
-playGames firstgame showstats maxspeed cavenum sstate@SavedState{..} = do
+playGames :: Bool -> Bool -> SavedState -> IO ()
+playGames firstgame showstats sstate@SavedState{..} = do
   (screenw,screenh) <- displaySize  -- use full screen height for each game (apparently last line is unusable on windows ? surely it's fine)
   let
-    highscore = fromMaybe 0 $ M.lookup (maxspeed, cavenum) highscores
-    game = newGame firstgame showstats screenh cavenum maxspeed highscore
+    highscore = fromMaybe 0 $ M.lookup (currentspeed, currentcave) highscores
+    game = newGame firstgame showstats screenh currentspeed currentcave highscore
 
   -- run one game. Will exit if terminal is too small.
-  g@GameState{score,exit,playerx} <- Terminal.Game.playGameS game
+  g@GameState{scene,score,exit,playerx} <- Terminal.Game.playGameS game
+  -- game ended by crashing or quitting. Ctrl-c is not caught here.
 
-  -- game ended by crashing, reaching cave end, or quitting with q. (Ctrl-c is not caught here.)
-  -- persistent state: log an end event
   let atend = playerAtEnd g
-  let evcons = if atend then Compl else Crash
-  t <- getCurrentTime
-  logAppend [evcons t maxspeed cavenum (playerDepth g) playerx score]
-  -- in-memory state: update high caves/scores, and
-  -- if the end was reached, advance to next cave or speed
-  let
-    (cavenum', maxspeed')
-      | not atend             = (cavenum,   maxspeed)
-      | cavenum < maxcavenum  = (cavenum+1, maxspeed)
-      | otherwise             = (1,         maxspeed+5)
-    sstate' = savedStateUpdate maxspeed cavenum score cavenum' sstate
+  sstate' <- case scene of
+    -- game ended by pressing q; no state changes
+    Playing -> return sstate
+
+    -- game ended by crashing at or before cave end
+    RunEnd compl _ -> do
+      -- persistent state: log a run end event
+      t <- getCurrentTime 
+      logAppend [(if compl then Compl else Crash) t currentspeed currentcave (playerDepth g) playerx score]
+      -- in-memory state:
+      let
+        -- select next cave & speed
+        (nextcave, nextspeed)
+          | not compl                 = (currentcave,   currentspeed)
+          | currentcave < maxcavenum  = (currentcave+1, currentspeed)
+          | otherwise                 = (1,             currentspeed+5)
+        -- update high score/high cave if appropriate (XXX needs next cave number, wrong ?)
+        sstate1 = savedStateUpdate currentspeed currentcave score nextcave sstate
+      return sstate1{currentcave=nextcave, currentspeed=nextspeed}
 
   -- play again, or exit the app
   if not exit
   then 
-    playGames False showstats maxspeed cavenum' sstate'
+    playGames False showstats sstate'
   else do
     putStr $ progressMessage sstate'
     putStrLn ""
@@ -652,8 +659,8 @@ playGames firstgame showstats maxspeed cavenum sstate@SavedState{..} = do
     when soundEnabled quitSound
 
 -- Initialise a new game (a cave run).
-newGame :: Bool -> Bool -> Height -> CaveNum -> MaxSpeed -> Score -> Game GameState
-newGame firstgame stats gameh cavenum maxspeed hs =
+newGame :: Bool -> Bool -> Height -> MaxSpeed -> CaveNum -> Score -> Game GameState
+newGame firstgame stats gameh maxspeed cavenum hs =
   Game { gScreenWidth   = gamewidth, -- width used (and required) for drawing (a constant 80 for repeatable caves)
          gScreenHeight  = gameh,     -- height used for drawing (the screen height)
          gFPS           = fps,       -- target frames/game ticks per second
