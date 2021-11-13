@@ -128,8 +128,8 @@ printScores = do
   putStrLn "-----------"
   let 
     highscoresl = reverse $ M.toList highscores
-    speeds = reverse $ nub $ sort $ map (fst.fst) highscoresl
-    scores = nub $ sort $ map snd highscoresl
+    speeds = reverse $ nubSort $ map (fst.fst) highscoresl
+    scores = nubSort $ map snd highscoresl
     scorew = length $ show (maximumDef 0 scores)
     highscoresbyspeed = [
       (speed, [(ca,sc) | ((sp,ca),sc) <- highscoresl, sp==speed])
@@ -250,7 +250,7 @@ newRowCrash col = M.fromList [(col, 1)]
 
 -- Add a new crash site to a RowCrashes.
 rowCrashesAdd :: CaveCol -> RowCrashes -> RowCrashes
-rowCrashesAdd col = insertOrUpdate 1 (+1) col
+rowCrashesAdd = insertOrUpdate 1 (+1)
 
 -- Crash sites within a cave.
 type CaveCrashes = M.Map CaveRow RowCrashes
@@ -559,18 +559,16 @@ eventsToSavedState evs = newSavedState{
            _ -> (defmaxspeed, defcavenum)
 
     highcaves = 
-      catMaybes $
-      map (maximumByMay (comparing snd)) $
+      mapMaybe (maximumByMay (comparing snd)) $
       groupBy (\a b -> fst a == fst b) $ 
-      nub $ sort $
+      nubSort $
       [(sp, ca) | Compl _ sp ca _ _ _ <- evs]
 
     highscores =
-      catMaybes $
-      map (maximumByMay (comparing snd)) $
+      mapMaybe (maximumByMay (comparing snd)) $
       groupBy (\a b -> fst a == fst b) $ 
-      nub $ sort $ 
-      catMaybes $ map eventScore evs
+      nubSort $ 
+      mapMaybe eventScore evs
       where
         eventScore (Crash _ sp ca _ _ sc) = Just ((sp,ca), sc)
         eventScore (Compl _ sp ca _ _ sc) = Just ((sp,ca), sc)
