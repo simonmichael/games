@@ -62,14 +62,14 @@ import Text.Printf
 
 progname  = "caverunner"
 version   = "1.0alpha"
-banner = unlines [
-   "  _________ __   _____  _______  ______  ____  ___  _____"
-  ," / ___/ __ `/ | / / _ \\/ ___/ / / / __ \\/ __ \\/ _ \\/ ___/"
-  ,"/ /__/ /_/ /| |/ /  __/ /  / /_/ / / / / / / /  __/ /    "
-  ,"\\___/\\__,_/ |___/\\___/_/   \\__,_/_/ /_/_/ /_/\\___/_/     "
-  ]
 
-usage termsize msoxpath sstate@SavedState{..} = (banner++) $ init $ unlines [
+printBanner = do
+  putStrLnAnsi [bold_, fgvividblue]   "  _________ __   _____  _______  ______  ____  ___  _____"
+  putStrLnAnsi [bold_, fgvividgreen]  " / ___/ __ `/ | / / _ \\/ ___/ / / / __ \\/ __ \\/ _ \\/ ___/"
+  putStrLnAnsi [bold_, fgvividyellow] "/ /__/ /_/ /| |/ /  __/ /  / /_/ / / / / / / /  __/ /    "
+  putStrLnAnsi [bold_, fgvividred]    "\\___/\\__,_/ |___/\\___/_/   \\__,_/_/ /_/_/ /_/\\___/_/     "
+
+usage termsize msoxpath sstate@SavedState{..} = init $ unlines [
    ""
   ,"caverunner "++version++" - a small terminal arcade game by Simon Michael."
   ,"--------------------------------------------------------------------------------" -- 80
@@ -123,9 +123,10 @@ printScores = do
   sstate@SavedState{..} <- getSavedState
   clearScreen
   -- setCursorPosition 0 0  -- omit for now, allows entr to scroll output
-  putStrLn banner
-  putStrLn "HIGH SCORES"
-  putStrLn "-----------"
+  printBanner
+  -- putStrLnAnsi [bold_]
+  putStrLn 
+    "\nHIGH SCORES\n-----------"
   let 
     highscoresl = reverse $ M.toList highscores
     speeds = reverse $ nubSort $ map (fst.fst) highscoresl
@@ -659,7 +660,7 @@ main = do
 -- Does not show crashes currently.
 printCave cavenum mdepth SavedState{allcrashes} = do
   let crashes = fromMaybe M.empty $ M.lookup cavenum allcrashes
-  putStrLn $ progname ++ " cave "++show cavenum
+  putStrLnAnsi [bold_] $ progname ++ " cave "++show cavenum
   go mdepth $ newGameState False False gamewidth 25 cavenum 15 0 crashes
   where
     go (Just 0) _ = return ()
@@ -1065,6 +1066,7 @@ exitWithUsage sstate = do
   clearScreen >> setCursorPosition 0 0
   termsize <- displaySizeStrSafe
   msox <- findExecutable "sox"
+  printBanner
   putStr $ usage termsize msox sstate
   exitSuccess
 
