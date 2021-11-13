@@ -32,7 +32,7 @@ import Control.Applicative
 import Control.Concurrent
 import Control.Exception
 import Control.Monad
-import Data.Bifunctor (first)
+import Data.Bifunctor (second)
 import Data.Char (chr,ord,isSpace)
 import Data.Function (fix)
 import Data.Functor ((<&>))
@@ -556,12 +556,14 @@ eventsToSavedState evs = newSavedState{
            Just (Crash _ sp ca _ _ _) -> (sp, ca)
            Just (Compl _ sp ca _ _ _) -> (sp, ca+1)
            _ -> (defmaxspeed, defcavenum)
+
     highcaves = 
       catMaybes $
       map (maximumByMay (comparing snd)) $
       groupBy (\a b -> fst a == fst b) $ 
       nub $ sort $
       [(sp, ca) | Compl _ sp ca _ _ _ <- evs]
+
     highscores =
       catMaybes $
       map (maximumByMay (comparing snd)) $
@@ -572,8 +574,14 @@ eventsToSavedState evs = newSavedState{
         eventScore (Crash _ sp ca _ _ sc) = Just ((sp,ca), sc)
         eventScore (Compl _ sp ca _ _ sc) = Just ((sp,ca), sc)
         eventScore _ = Nothing
+
     allcrashes =
-      map (\(ca,rcs) -> (ca, M.fromList $ map (\(r,cs) -> (r, M.fromList [ (d, length ds) | ds@(d:_) <- group cs])) $ groupSort rcs)) $
+      map (
+        second (
+          M.fromList .
+          map (second (M.fromList . count)) .
+          groupSort)
+        ) $
       groupSort $
       concatMap eventCrash evs
       where
@@ -1089,6 +1097,9 @@ silenceExceptions = handle (\(e::IOException) -> -- trace (show e) $
 
 silenceOutput :: ProcessConfig i o e -> ProcessConfig i () ()
 silenceOutput = setStdout nullStream . setStderr nullStream
+
+count :: Ord a => [a] -> [(a, Int)]
+count xs = [(y, length ys) | ys@(y:_) <- group $ sort xs]
 
 -------------------------------------------------------------------------------
 -- drawing for each scene
