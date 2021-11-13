@@ -200,6 +200,7 @@ maxcavenum  = 10  -- limit to 10 v1 caves
 defmaxspeed = 15
 maxmaxspeed = 60
 cavelookahead = 1
+completionbonusmultiplier = 10  -- award this times max speed when completing a cave
 
 cavespeedinit  = 1      -- nominal initial cave scroll speed (= player's speed within the cave)
 cavespeedaccel = 1.008  -- multiply speed by this much each game tick (gravity)
@@ -236,11 +237,11 @@ type CaveCol = Column
 -- One line within a cave, with its left/right wall positions.
 data CaveLine = CaveLine GameCol GameCol deriving (Show)
 
--- A game scene/mode. Some scenes may progress through numbered phases which start at 1.
+-- A game scene/mode. Some scenes may progress through numbered phases starting at 1.
 data Scene =
     Playing
-  | Crashed
-  | Complete Int  -- 1 show game over, 2 show score bonus / high score, 3 show press a key
+  | RunEnd Bool Int  -- was cave completed ?
+                     -- and phase: 1 show game over, 2 show bonus/highscore, 3 (not used) show press a key
   deriving (Show,Eq)
 
 -- In-memory state for a single cave run. A player might consider
@@ -704,7 +705,7 @@ step g@GameState{scene=Playing, ..} Tick =
 
       | gameover ->  -- crashed or reached the end
         unsafePlay (if victory then victorySound else crashSound cavespeed) $
-        g{ scene        = if victory then Complete 1 else Crashed
+        g{ scene        = RunEnd victory 1
           ,stick        = 0
           ,restarttimer = reset restarttimer
           }
@@ -751,24 +752,27 @@ step g@GameState{scene=Playing, ..} Tick =
             ,cavespeedmin = cavespeedmin'
             }
 
--- completionbonusdelaysecs into the cave complete scene, add score bonus and maybe play/show high score message
-step g@GameState{scene=Complete 1, ..} Tick
-  | stick > secsToTicks completionbonusdelaysecs =
-      (if score > highscore then unsafePlay endGameHighScoreSound else id) $
-      g{scene=Complete 2
+step g@GameState{scene=RunEnd compl phase, ..} Tick
+  -- run end + completionbonusdelaysecs: add score bonus, maybe show high score message, phase 2
+  | phase==1 && stick > secsToTicks completionbonusdelaysecs =
+      let
+        bonus | compl     = round cavespeedmax * completionbonusmultiplier
+              | otherwise = 0
+        score' = score + bonus
+      in
+        (if score > highscore then unsafePlay endGameHighScoreSound else id) $
+        g{scene=RunEnd compl 2
+        ,restarttimer = tick restarttimer
+        ,score      = score'
+        ,scorebonus = bonus  -- save this for display
+        ,highscore  = max highscore score'
+        }
+  -- run end + completionadvancedelaysecs: phase 3 (show press key to continue)
+  | phase==2 && stick > secsToTicks completionadvancedelaysecs =
+      g{scene=RunEnd compl 3
        ,restarttimer = tick restarttimer
-       ,score      = score'
-       ,scorebonus = bonus  -- save this for display
-       ,highscore  = max highscore score'
        }
-  where
-    score' = score + bonus
-    bonus = round cavespeedmax * completionbonusmultiplier
-      where completionbonusmultiplier = 10
-
-step g@GameState{scene=Complete _, ..} Tick = g{restarttimer = tick restarttimer}
-
-step g@GameState{scene=Crashed, ..} Tick = g{restarttimer = tick restarttimer}
+  | otherwise = g{restarttimer = tick restarttimer}
 
 step g@GameState{..} (KeyPress 'q') = g { exit = True }
 
@@ -890,10 +894,8 @@ stepScore g@GameState{..} cavesteps'
 -------------------------------------------------------------------------------
 -- game state helpers
 
-gameOver GameState{scene} = case scene of
-  Crashed    -> True
-  Complete _ -> True
-  _          -> False
+gameOver GameState{scene=RunEnd _ _} = True
+gameOver _ = False
 
 -- Create a timer for the next cave step, given the desired steps/s.
 -- The steps/s should be no greater than ticks/s (the frame rate),
@@ -1071,8 +1073,10 @@ showCaveLineNumbered gamew l n =
 drawPlayer GameState{..} =
   cell char #bold #color hue Vivid
   where
-    (char, hue) | scene==Crashed = (crashchar,Red)
-                | otherwise = (playerchar,Blue)
+    (char, hue) = 
+      case scene of 
+        RunEnd False _ -> (crashchar,Red)
+        _              -> (playerchar,Blue)
 
 drawTitle GameState{..} =
   hcat $ zipWith (\a b -> a b) colors (map (bold.cell) $ progname++"! ")
@@ -1118,7 +1122,7 @@ drawStats g@GameState{..} =
 
 showSceneCompact width scene = 
   case scene of
-    Complete n -> take (width-length sn) ss ++ sn
+    RunEnd _ n -> take (width-length sn) ss ++ sn
       where sn = show n
     _ -> take width ss
   where ss = show scene
@@ -1134,16 +1138,17 @@ drawGameOver g@GameState{..} w h =
     showline3 = stick > secsToTicks completionadvancedelaysecs
     -- printf makes runtime errors, be careful
     [l1,l2,l3] = case scene of
-      Crashed -> [
+      RunEnd False _ -> [
          "GAME OVER"
         ,if showline2 then printf "You reached depth %d.%s" (playerDepth g) hs else ""
         ,if showline3 then "Press a key to relaunch.." else ""
         ]
-      Complete n -> [
+      RunEnd True _ -> [
          printf "CAVE %d COMPLETE" cavenum
         ,if showline2 then printf "Nice flying! Bonus: %d.%s" scorebonus hs else ""
         ,if showline3 then "Press a key to advance.." else ""
         ]
+      _ -> ["","",""]
     hs = if score > highscorecopy then " New high score!" else ""
     xstart str = 2 + half innerw - half (fromIntegral $ length str) where innerw = w - 2
     (y1, x1) = (3, xstart l1)

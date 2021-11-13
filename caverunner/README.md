@@ -85,6 +85,7 @@ Persistence
 ### Roadmap/Wishlist
 
 - show crash sites
+- banner colours
 - cave-specific colours ?
 - light/dark schemes ? cf Terminal.app silver aerogel
 - version numbers
