@@ -241,9 +241,6 @@ type CaveCol = Column
 -- One line within a cave, with its depth and left/right wall positions.
 data CaveLine = CaveLine CaveRow CaveCol CaveCol deriving (Show)
 
-insertOrUpdate :: Ord k => v -> (v -> v) -> k -> M.Map k v -> M.Map k v
-insertOrUpdate newval updatefn key = M.alter (maybe (Just newval) (Just . updatefn)) key
-
 -- Crash sites within a row, and how many times at each one.
 type RowCrashes = M.Map CaveCol Int
 
@@ -265,6 +262,10 @@ newCaveCrash row col = M.fromList [(row, newRowCrash col)]
 -- Add a new crash site to a CaveCrashes.
 caveCrashesAdd :: CaveRow -> CaveCol -> CaveCrashes -> CaveCrashes
 caveCrashesAdd row col = insertOrUpdate (newRowCrash col) (rowCrashesAdd col) row
+
+-- How many crashes have there been at the given cave depth and column ?
+caveCrashesAt :: CaveRow -> CaveCol -> CaveCrashes -> Int
+caveCrashesAt row col cavecrashes = M.lookup row cavecrashes >>= M.lookup col & fromMaybe 0
 
 -- Crash sites within all caves.
 type AllCrashes = M.Map CaveNum CaveCrashes
@@ -1098,6 +1099,9 @@ silenceExceptions = handle (\(e::IOException) -> -- trace (show e) $
 silenceOutput :: ProcessConfig i o e -> ProcessConfig i () ()
 silenceOutput = setStdout nullStream . setStderr nullStream
 
+insertOrUpdate :: Ord k => v -> (v -> v) -> k -> M.Map k v -> M.Map k v
+insertOrUpdate newval updatefn = M.alter (maybe (Just newval) (Just . updatefn))
+
 count :: Ord a => [a] -> [(a, Int)]
 count xs = [(y, length ys) | ys@(y:_) <- group $ sort xs]
 
@@ -1174,13 +1178,15 @@ showCaveLineNumbered gamew l n =
   where
     num = show n
 
-drawPlayer GameState{..} =
+drawPlayer g@GameState{..} =
   cell char #bold #color hue Vivid
   where
     (char, hue) = 
       case scene of 
-        RunEnd False _ -> (crashchar,Red)
-        _              -> (playerchar,Blue)
+        RunEnd False _ -> (crashChar numcrashes, Red)
+        _              -> (playerchar,           Blue)
+        where
+          numcrashes = 1 + caveCrashesAt (playerDepth g) playerx cavecrashes
 
 drawTitle GameState{..} =
   hcat $ zipWith (\a b -> a b) colors (map (bold.cell) $ progname++"! ")
