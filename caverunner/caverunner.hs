@@ -106,7 +106,7 @@ progressMessage sstate@SavedState{..} = unlines [
     highscore = fromMaybe 0 $ M.lookup (currentspeed,currentcave) highscores
 
 unlockedCavesMessage SavedState{..} =
-  "At speed " ++ show currentspeed ++ " you have completed " ++ cavecompleted ++ ", and can reach " ++ caves ++ "."
+  "At speed " ++ show currentspeed ++ " you have completed " ++ cavecompleted ++ "."  -- ++ ", and can reach " ++ caves ++ "."
   where
     mhighcave = M.lookup currentspeed highcaves
     cavecompleted = case mhighcave of
@@ -117,7 +117,7 @@ unlockedCavesMessage SavedState{..} =
 
 -- Print high scores to stdout.
 printScores = do
-  sstate@SavedState{..} <- logState
+  sstate@SavedState{..} <- getSavedState
   clearScreen >> setCursorPosition 0 0
   putStrLn $ banner
   putStrLn "HIGH SCORES"
@@ -236,16 +236,12 @@ type CaveCol = Column
 -- One line within a cave, with its left/right wall positions.
 data CaveLine = CaveLine GameCol GameCol deriving (Show)
 
--- A game scene/mode. Some scenes may progress through numbered subscenes/phases starting at 1.
+-- A game scene/mode. Some scenes may progress through numbered phases which start at 1.
 data Scene =
     Playing
   | Crashed
-  | Complete Int  -- 1 game over 2 score bonus / high score 3 press a key
+  | Complete Int  -- 1 show game over, 2 show score bonus / high score, 3 show press a key
   deriving (Show,Eq)
-
--- -- Which Complete phase is this scene, or 0 if not Complete.
--- completePhase (Complete n) = n
--- completePhase _ = 0
 
 -- In-memory state for a single cave run. A player might consider
 -- several of these one "game" if they complete multiple runs without crashing.
@@ -323,172 +319,39 @@ newGameState firstgame stats w h cavenum maxspeed hs = GameState {
   where
     initspeed = fromIntegral maxspeed / 6
 
--- long-term/persistent app state
-data SavedState = SavedState {
-   currentspeed :: MaxSpeed    -- the speed most recently played
-  ,currentcave  :: CaveNum     -- the cave most recently played
-  ,highcaves    :: M.Map MaxSpeed CaveNum  -- the highest cave completed at each speed
-  ,highscores   :: M.Map (MaxSpeed, CaveNum) Score  -- the highest score achieved in each cave at each speed
-} deriving (Read, Show, Eq)
-
-newSavedState = SavedState{
-   currentspeed = defmaxspeed
-  ,currentcave  = defcavenum
-  ,highcaves    = M.empty
-  ,highscores   = M.empty
-}
-
--- A single high score for a cave and speed (for reading old scores file).
-data HighScore = HighScore {
-   hcave   :: CaveNum
-  ,hspeed  :: MaxSpeed
-  ,hscore  :: Score
-} deriving (Show,Read,Eq,Ord)
-
-newHighScore = HighScore {
-   hcave   = 0
-  ,hspeed  = 0
-  ,hscore  = 0
-  }
-
--- A set of high scores, as a list for saving in format 2 scores file.
--- These invariants can be expected:
--- - it is always sorted upward (lowest caves, speeds, scores first)
--- - there is at most one score for each cave & speed.
-type HighScores = [HighScore]
-
--- -- Look up the best score for this cave and speed, if any.
--- hsLookup :: CaveNum -> MaxSpeed -> HighScores -> Maybe HighScore
--- hsLookup cave speed sscores =
---   maximumMay [hs | hs@HighScore{..} <- sscores, hcave==cave, hspeed==speed]
-
--- -- Add this score to the sorted high scores if it is the first score
--- -- for the given cave & speed, or if it is better than the old score
--- -- (and in that case, replace the old score).
--- hsUpdate :: HighScore -> HighScores -> HighScores
--- hsUpdate new@HighScore{..} scores =
---   case hsLookup hcave hspeed scores of
---     Nothing              -> sort $ new : scores
---     Just old | new > old -> sort $ new : (scores \\ [old])
---     _                    -> scores
-
 -------------------------------------------------------------------------------
 -- persistence
+-- We save persistent state by logging events to a log file, from which
+-- the app's SavedState (game progress, high scores, crash sites..) is calculated.
+-- This is robust, forgiving, simple, and efficient enough for now.
+-- Older save formats are also supported.
 
--- We save persistent state by logging events to a log file ("format 4"),
--- from which current state (game progress, high scores, crash sites..) is
--- calculated. This is robust, forgiving, simple, and efficient enough for now.
-
--- Where we store save files.
+-- Where we save persistent data.
 getSaveDir :: IO FilePath
 getSaveDir = getXdgDirectory XdgData progname
 
--- Types of event we can log.
--- These are stored in chronological order in an event log file.
--- Events converted from old save files may have some missing (0) or approximated fields.
-data LoggedEvent =
-    Other String                                          -- ^ A line found in the log which we couldn't parse.
-  | Crash UTCTime MaxSpeed CaveNum CaveRow GameCol Score  -- ^ End of an incomplete cave run, with speed, cave, final position and score.
-  | Compl UTCTime MaxSpeed CaveNum CaveRow GameCol Score  -- ^ End of a complete cave run, with speed, cave, final position and score.
-  deriving (Show,Read,Eq,Ord)
-
--- Older event log format 3.
-data LoggedEvent3 =
-    Ended UTCTime CaveNum MaxSpeed CaveRow GameCol Score YN  -- ^ End of a cave run, with cave, speed, final position, score and whether completed.
-  deriving (Show,Read,Eq,Ord)
-
--- A more compact Bool.
-data YN = Y | N deriving (Show,Read,Eq,Ord)
-
-fromFormat3 :: LoggedEvent3 -> LoggedEvent
-fromFormat3 ev@(Ended t ca sp r c sc compl) 
-  | ca > maxcavenum = Other $ show ev   -- ignore scores for no-longer-playable caves
-  | otherwise = (if compl==Y then Compl else Crash) t sp ca r c sc
-
--- Read one line of the event log if possible, including older formats.
-readLogLine :: String -> LoggedEvent
-readLogLine s = fromMaybe (Other s) $ fromFormat3 <$> readMay s <|> readMay s
-  
--- Calculate app state, high scores from events.
-eventsToAppState :: [LoggedEvent] -> SavedState
-eventsToAppState evs = newSavedState{
-    currentspeed = lastspeed
-  , currentcave  = lastcave
-  , highcaves    = M.fromList highcaves
-  , highscores   = M.fromList highscores
-  }
-  where
-    (lastspeed, lastcave) = case lastMay evs of
-           Just (Crash _ sp ca _ _ _) -> (sp, ca)
-           Just (Compl _ sp ca _ _ _) -> (sp, ca)
-           _ -> (defmaxspeed, defcavenum)
-    highcaves = 
-      catMaybes $
-      map (maximumByMay (comparing snd)) $
-      groupBy (\a b -> fst a == fst b) $ 
-      nub $ sort $
-      [(sp, ca) | Compl _ sp ca _ _ _ <- evs]
-    highscores =
-      catMaybes $
-      map (maximumByMay (comparing snd)) $
-      groupBy (\a b -> fst a == fst b) $ 
-      nub $ sort $ 
-      catMaybes $ map eventScore evs
-
-savedStateUpdate speed cave score sstate@SavedState{..} =
-  sstate{
-     currentspeed = speed
-    ,currentcave  = cave
-    ,highcaves    = M.insertWith max speed cave highcaves
-    ,highscores   = M.insertWith max (speed,cave) score highscores
-    }
-
-eventScore (Crash _ sp ca _ _ sc) = Just ((sp,ca), sc)
-eventScore (Compl _ sp ca _ _ sc) = Just ((sp,ca), sc)
-eventScore _ = Nothing
-
--- Read current app state from event log.
-logState :: IO SavedState
-logState = logRead <&> eventsToAppState
-
--- Get the file path of the event log, which contains chronologically ordered events,
--- one per line, from which we can calculate state and statistics.
-logPath :: IO FilePath
-logPath = getSaveDir <&> (</> logfilename) where logfilename = "log"
-
--- Append some events to the event log on disk, creating it and its directory if necessary.
-logAppend :: [LoggedEvent] -> IO ()
-logAppend evs = do
-  f <- logPath
-  let d = takeDirectory f
-  createDirectoryIfMissing True d
-  appendFile f $ unlines $ map pshow evs
-
--- Read all events from the event log file, in chronological order.
--- Any unreadable lines are parsed as Other events.
--- If the file doesn't exist, returns an empty list. Other problems will raise an IO exception.
-logRead :: IO [LoggedEvent]
-logRead = do
-  f <- logPath
+-- Try to read a value from the named save file, removing newlines first
+-- (so it can read either standard or prettified show output). 
+-- Returns Just value if successful, Nothing if the file does not exist,
+-- or throws an IO error if reading fails.
+load :: (Read a, Show a, Eq a) => FilePath -> IO (Maybe a)
+load filename = do
+  d <- getSaveDir
+  let f = d </> filename
   exists <- doesFileExist f
-  if exists
-  then readFile f <&> map readLogLine . lines
-  else return []
+  if not exists
+  then pure Nothing
+  else do
+    s <- filter (/='\n') <$> readFileStrictly f
+    case readMay s of
+      Nothing -> throwIO $ userError $ init $ unlines [  -- XXX don't print "user error"
+           "could not read " ++ f
+          ,"Perhaps the format has changed ? Please move it out of the way and run again."
+          ]
+      Just v -> return $ Just v
 
--- If the event log file doesn't exist, look for the older state and scores
--- files and generate it from those. Can be called once at app start.
-logMigrate :: IO ()
-logMigrate = do
-  exists <- logPath >>= doesFileExist
-  unless exists $ do
-    scoresevs <- scoresFileToEvents
-    stateevs  <- stateFileToEvents
-    logAppend $ scoresevs ++ stateevs
-
--- In earlier 1.0 alpha, there was instead a `state` file (format 1)
--- and a `scores` file (formats 1 and 2). When no `log` file exists,
--- we look for those older files and convert them to a `log` file
--- automatically.
+-- Format 1 & 2, state and scores files.
+-- These will be converted to a log file if one does not exist.
 
 -- Convert 1.0alpha's state file to one LoggedEvent describing the most 
 -- recently played speed & cave.
@@ -528,36 +391,166 @@ scoresFileToEvents = do
     fromHighScores1 :: HighScores1 -> HighScores
     fromHighScores1 scores1 = sort [newHighScore{hcave=c,hspeed=s,hscore=sc} | ((c,s),sc) <- M.toList scores1]
 
--- high scores serialisation format 1
+-- Format 1 high scores.
 type HighScores1 = M.Map (CaveNum, MaxSpeed) Score
 
--- Try to read a value from the named save file, removing newlines and
--- then read-ing (reads old save's prettified show output or standard
--- show output). Returns Just value if successful, Nothing if the file
--- does not exist, or throws an IO error if reading fails.
-load :: (Read a, Show a, Eq a) => FilePath -> IO (Maybe a)
-load filename = do
-  d <- getSaveDir
-  let f = d </> filename
+-- Format 2 high scores.
+-- These invariants can be expected:
+-- - it is always sorted upward (lowest caves, speeds, scores first)
+-- - there is at most one score for each cave & speed.
+type HighScores = [HighScore]
+
+-- A single format 2 high score for a cave and speed.
+data HighScore = HighScore {
+   hcave   :: CaveNum
+  ,hspeed  :: MaxSpeed
+  ,hscore  :: Score
+} deriving (Show,Read,Eq,Ord)
+
+newHighScore = HighScore {
+   hcave   = 0
+  ,hspeed  = 0
+  ,hscore  = 0
+  }
+
+-- Format 3 log file.
+
+data LoggedEvent3 =
+    Ended UTCTime CaveNum MaxSpeed CaveRow GameCol Score YN  -- ^ End of a cave run, with cave, speed, final position, score and whether completed.
+  deriving (Show,Read,Eq,Ord)
+
+data YN = Y | N deriving (Show,Read,Eq,Ord)
+
+fromFormat3 :: LoggedEvent3 -> LoggedEvent
+fromFormat3 ev@(Ended t ca sp r c sc compl) 
+  | ca > maxcavenum = Other $ show ev   -- ignore scores for no-longer-playable caves
+  | otherwise = (if compl==Y then Compl else Crash) t sp ca r c sc
+
+-- Format 4 (current).
+
+-- Types of event we can log.
+-- These are stored in chronological order in an event log file.
+-- Events converted from old save files may have some missing (0) or approximated fields.
+data LoggedEvent =
+    Other String                                          -- ^ A line found in the log which we couldn't parse.
+  | Crash UTCTime MaxSpeed CaveNum CaveRow GameCol Score  -- ^ End of an incomplete cave run, with speed, cave, final position and score.
+  | Compl UTCTime MaxSpeed CaveNum CaveRow GameCol Score  -- ^ End of a complete cave run, with speed, cave, final position and score.
+  deriving (Show,Read,Eq,Ord)
+
+-- Format 5 (next ?)
+
+-- Crash 2021-11-13 01:00:35.630314 UTC 15 1 0 40 0
+-- Crash 2021-11-13 01:01:48.73835 UTC 15 1 1 39 1
+-- Compl 2021-11-13 01:02:15.612641 UTC 15 1 3 41 153
+-- -> 
+-- CR1 2021-11-13 01:00:35 UTC 15  1  Crash 000 040     0
+-- CR1 2021-11-13 01:01:48 UTC 15  1  Crash 001 039     1
+-- CR1 2021-11-13 01:02:15 UTC 15  1  Compl 003 041   153
+
+-- Get the file path of the event log, which contains chronologically ordered events,
+-- one per line, from which we can calculate state and statistics.
+logPath :: IO FilePath
+logPath = getSaveDir <&> (</> logfilename) where logfilename = "log"
+
+-- Append some events to the event log on disk, creating it and its directory if necessary.
+logAppend :: [LoggedEvent] -> IO ()
+logAppend evs = do
+  f <- logPath
+  let d = takeDirectory f
+  createDirectoryIfMissing True d
+  appendFile f $ unlines $ map pshow evs
+
+-- If the event log file doesn't exist, but the old state and scores
+-- files do, generate it from those. Called at app start.
+logMigrate :: IO ()
+logMigrate = do
+  exists <- logPath >>= doesFileExist
+  unless exists $ do
+    scoresevs <- scoresFileToEvents
+    stateevs  <- stateFileToEvents
+    logAppend $ scoresevs ++ stateevs
+
+-- Parse one line of the event log if possible, trying old and new formats.
+readLogLine :: String -> LoggedEvent
+readLogLine s = fromMaybe (Other s) $ fromFormat3 <$> readMay s <|> readMay s
+  
+-- Read all events from the event log file, in chronological order.
+-- Any unreadable lines are parsed as Other events.
+-- If the file doesn't exist, returns an empty list. Other problems will raise an IO exception.
+logRead :: IO [LoggedEvent]
+logRead = do
+  f <- logPath
   exists <- doesFileExist f
-  if not exists
-  then pure Nothing
-  else do
-    s <- filter (/='\n') <$> readFileStrictly f
-    case readMay s of
-      Nothing -> throwIO $ userError $ init $ unlines [  -- XXX don't print "user error"
-           "could not read " ++ f
-          ,"Perhaps the format has changed ? Please move it out of the way and run again."
-          ]
-      Just v -> return $ Just v
+  if exists
+  then readFile f <&> map readLogLine . lines
+  else return []
+
+-- Long-term persistent app state, as represented in memory.
+data SavedState = SavedState {
+   currentspeed :: MaxSpeed                         -- the current speed being played
+  ,currentcave  :: CaveNum                          -- the current cave being played at this speed
+  ,highcaves    :: M.Map MaxSpeed CaveNum           -- the highest cave completed at each speed
+  ,highscores   :: M.Map (MaxSpeed, CaveNum) Score  -- the highest score achieved in each cave at each speed
+} deriving (Read, Show, Eq)
+
+newSavedState = SavedState{
+   currentspeed = defmaxspeed
+  ,currentcave  = defcavenum
+  ,highcaves    = M.empty
+  ,highscores   = M.empty
+}
+
+-- Calculate app saved state from events.
+eventsToSavedState :: [LoggedEvent] -> SavedState
+eventsToSavedState evs = newSavedState{
+    currentspeed = lastspeed
+  , currentcave  = lastcave
+  , highcaves    = M.fromList highcaves
+  , highscores   = M.fromList highscores
+  }
+  where
+    (lastspeed, lastcave) = case lastMay evs of
+           Just (Crash _ sp ca _ _ _) -> (sp, ca)
+           Just (Compl _ sp ca _ _ _) -> (sp, ca)
+           _ -> (defmaxspeed, defcavenum)
+    highcaves = 
+      catMaybes $
+      map (maximumByMay (comparing snd)) $
+      groupBy (\a b -> fst a == fst b) $ 
+      nub $ sort $
+      [(sp, ca) | Compl _ sp ca _ _ _ <- evs]
+    highscores =
+      catMaybes $
+      map (maximumByMay (comparing snd)) $
+      groupBy (\a b -> fst a == fst b) $ 
+      nub $ sort $ 
+      catMaybes $ map eventScore evs
+      where
+        eventScore (Crash _ sp ca _ _ sc) = Just ((sp,ca), sc)
+        eventScore (Compl _ sp ca _ _ sc) = Just ((sp,ca), sc)
+        eventScore _ = Nothing
+
+-- Read the app's persistent state from the log file.
+getSavedState :: IO SavedState
+getSavedState = logRead <&> eventsToSavedState
+
+-- Update the in-memory copy of persistent state with the last run's 
+-- speed, cave number, score, and the cave number to be played next.
+savedStateUpdate speed lastcave score nextcave sstate@SavedState{..} =
+  sstate{
+     currentspeed = speed
+    ,currentcave  = nextcave
+    ,highscores   = M.insertWith max (speed, lastcave) score highscores
+    ,highcaves    = M.insertWith max speed nextcave highcaves
+    }
 
 -------------------------------------------------------------------------------
 -- app logic
 
 main = do
-  args <- getArgs
   logMigrate
-  sstate@SavedState{..} <- logState
+  sstate@SavedState{..} <- getSavedState
+  args <- getArgs
   when ("-h" `elem` args || "--help" `elem` args) $ exitWithUsage sstate
   let
     (flags, args') = partition ("-" `isPrefixOf`) args
@@ -645,7 +638,7 @@ playGames firstgame showstats maxspeed cavenum sstate@SavedState{..} = do
       | not atend             = (cavenum,   maxspeed)
       | cavenum < maxcavenum  = (cavenum+1, maxspeed)
       | otherwise             = (1,         maxspeed+5)
-    sstate' = savedStateUpdate maxspeed cavenum' score sstate
+    sstate' = savedStateUpdate maxspeed cavenum score cavenum' sstate
 
   -- play again, or exit the app
   if not exit
@@ -1119,6 +1112,9 @@ drawStats g@GameState{..} =
   === (stringPlane "   stick " ||| stringPlane (printf "%4d " stick))
   === (stringPlane "scene " ||| stringPlane (printf "%-7s " (showSceneCompact 7 scene)))
   -- === (stringPlane "   bonus " ||| stringPlane (printf "%4d " scorebonus))
+  === (stringPlane "   score " ||| stringPlane (printf "%4d " score))
+  === (stringPlane "  hscore " ||| stringPlane (printf "%4d " highscore))
+  === (stringPlane "hscorecp " ||| stringPlane (printf "%4d " highscorecopy))
 
 showSceneCompact width scene = 
   case scene of
@@ -1260,11 +1256,11 @@ inGameHighScoreSound = soxPlay False [".1 sin 800 sin 800 delay 0 +.2"]
 
 endGameHighScoreSound =
   soxPlay False [
-    ".05 sin 400 sin 500 sin 600 sin 800"
-    -- ".05 sin 400 sin 500 sin 600 sin 800 sin 800"  -- extra end note in case of truncation ?
+    -- ".05 sin 400 sin 500 sin 600 sin 800"
+    ".05 sin 400 sin 500 sin 600 sin 800 sin 800"  -- extra end note in case of truncation
     ,"delay", overalldelay  -- not used any more but tricky to remove
-    ,"+.1 +.1 +.1"
-    -- ,"+.1 +.1 +.1 +.2"
+    -- ,"+.1 +.1 +.1"
+    ,"+.1 +.1 +.1 +.2"
     ]
   where
     overalldelay = "0" -- show $ restartdelaysecs / 2
