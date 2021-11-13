@@ -84,18 +84,24 @@ Persistence
 
 ### Roadmap/Wishlist
 
-- show crash sites
-- banner colours
+- better run/install docs
+- total score/stats/ranking
+- prettier high scores
+  - dim inaccessible caves
+  - green completed caves
+  - bold current speed/cave
+  - show 0 for unplayed current cave
 - cave-specific colours ?
 - light/dark schemes ? cf Terminal.app silver aerogel
+- colour/no-colour
+- crash colours
 - version numbers
 - show actual frame rate
-- better run/install docs
 - beta test
 - test sound latency on other machines, windows
 - 1.0 release
 - multiple named saves ?
-- attract mode / in-game high score table
+- attract mode / in-game high scores / help
 - high score sharing / server
 - 3 lives ?
 - more interesting caves
