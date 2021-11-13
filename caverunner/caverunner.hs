@@ -1103,6 +1103,53 @@ insertOrUpdate newval updatefn = M.alter (maybe (Just newval) (Just . updatefn))
 count :: Ord a => [a] -> [(a, Int)]
 count xs = [(y, length ys) | ys@(y:_) <- group $ sort xs]
 
+-- Set stdout's terminal output style (Select Graphics Rendition mode)
+-- if it supports ANSI color.
+setSGR' sgrs = hSupportsANSIColor stdout >>= flip when (setSGR sgrs)
+
+-- Set stdout's terminal output style before printing, then reset it,
+-- if it supports ANSI color.
+putStrLnAnsi sgrs s = setSGR' sgrs >> putStrLn s >> setSGR' []
+putStrAnsi   sgrs s = setSGR' sgrs >> putStr   s >> setSGR' []
+
+-- https://hackage.haskell.org/package/ansi-terminal/docs/System-Console-ANSI-Types.html
+bold_           = SetConsoleIntensity BoldIntensity
+normal          = SetConsoleIntensity NormalIntensity
+reverse_        = SetSwapForegroundBackground True
+forward         = SetSwapForegroundBackground False
+fgblack         = SetColor Foreground Dull Black
+fgred           = SetColor Foreground Dull Red
+fggreen         = SetColor Foreground Dull Green
+fgyellow        = SetColor Foreground Dull Yellow
+fgblue          = SetColor Foreground Dull Blue
+fgmagenta       = SetColor Foreground Dull Magenta
+fgcyan          = SetColor Foreground Dull Cyan
+fgwhite         = SetColor Foreground Dull White
+fgvividblack    = SetColor Foreground Vivid Black
+fgvividred      = SetColor Foreground Vivid Red
+fgvividgreen    = SetColor Foreground Vivid Green
+fgvividyellow   = SetColor Foreground Vivid Yellow
+fgvividblue     = SetColor Foreground Vivid Blue
+fgvividmagenta  = SetColor Foreground Vivid Magenta
+fgvividcyan     = SetColor Foreground Vivid Cyan
+fgvividwhite    = SetColor Foreground Vivid White
+bgblack         = SetColor Background Dull Black
+bgred           = SetColor Background Dull Red
+bggreen         = SetColor Background Dull Green
+bgyellow        = SetColor Background Dull Yellow
+bgblue          = SetColor Background Dull Blue
+bgmagenta       = SetColor Background Dull Magenta
+bgcyan          = SetColor Background Dull Cyan
+bgwhite         = SetColor Background Dull White
+bgvividblack    = SetColor Background Vivid Black
+bgvividred      = SetColor Background Vivid Red
+bgvividgreen    = SetColor Background Vivid Green
+bgvividyellow   = SetColor Background Vivid Yellow
+bgvividblue     = SetColor Background Vivid Blue
+bgvividmagenta  = SetColor Background Vivid Magenta
+bgvividcyan     = SetColor Background Vivid Cyan
+bgvividwhite    = SetColor Background Vivid White
+
 -------------------------------------------------------------------------------
 -- drawing for each scene
 
@@ -1188,10 +1235,9 @@ drawPlayer g@GameState{..} =
 
 drawTitle GameState{..} =
   hcat $ zipWith (\a b -> a b) colors (map (bold.cell) $ progname++"! ")
-  where
-    colors =
-      drop (cavesteps `div` 3 `mod` 4) $
-      cycle [color Red Vivid, color Green Vivid, color Blue Vivid, color Yellow Vivid]
+  where 
+    colors = drop (cavesteps `div` 3 `mod` 4) $ cycle colorsRGBY
+    colorsRGBY = [color Red Vivid, color Green Vivid, color Blue Vivid, color Yellow Vivid]
 
 drawCaveName GameState{..} = stringPlane $ " cave "++show cavenum++" @ "++show (round cavespeedmax) ++ " "
 
