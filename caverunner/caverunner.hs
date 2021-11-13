@@ -539,11 +539,18 @@ getSavedState = logRead <&> eventsToSavedState
 -- Update the in-memory saved state from the last run as needed
 -- (maybe a new high score or high cave).
 -- The next cave number is also provided to help set the latter. (XXX wrong ?)
+savedStateUpdate :: MaxSpeed -> CaveNum -> Score -> CaveNum -> SavedState -> SavedState
 savedStateUpdate speed cave score nextcave sstate@SavedState{..} =
   sstate{
      highscores   = M.insertWith max (speed, cave) score highscores
     ,highcaves    = M.insertWith max speed nextcave highcaves
     }
+
+-- What's the saved current cave at the given speed ?
+savedStateCurrentCaveAt :: MaxSpeed -> SavedState -> CaveNum
+savedStateCurrentCaveAt speed sstate@SavedState{..} =
+  maybe defcavenum (+1) $ M.lookup speed highcaves
+
 
 -------------------------------------------------------------------------------
 -- app logic
@@ -558,7 +565,8 @@ main = do
     (speed, cavenum, hascavearg) =
       case args' of
         []    -> (currentspeed, currentcave, False)
-        [s]   -> (checkspeed $ readDef (speederr s) s, currentcave, False)
+        [s]   -> (checkspeed $ readDef (speederr s) s, savedStateCurrentCaveAt sp sstate, False)
+          where sp = checkspeed $ readDef (speederr s) s
         [s,c] -> (sp, checkcave sp $ readDef (caveerr c) c, True)
           where sp = checkspeed $ readDef (speederr s) s
         _     -> err "too many arguments, please see --help"
