@@ -118,40 +118,6 @@ unlockedCavesMessage SavedState{..} =
     maxcave = fromMaybe 0 mhighcave + cavelookahead
     caves = if maxcave == 1 then "cave 1" else "caves 1 to " ++ show maxcave
 
--- Print high scores to stdout.
-printScores = do
-  sstate@SavedState{..} <- getSavedState
-  clearScreen
-  -- setCursorPosition 0 0  -- omit for now, allows entr to scroll output
-  printBanner
-  -- putStrLnAnsi [bold_]
-  putStrLn 
-    "\nHIGH SCORES\n-----------"
-  let 
-    highscoresl = reverse $ M.toList highscores
-    speeds = reverse $ nubSort $ map (fst.fst) highscoresl
-    scores = nubSort $ map snd highscoresl
-    scorew = length $ show (maximumDef 0 scores)
-    highscoresbyspeed = [
-      (speed, [(ca,sc) | ((sp,ca),sc) <- highscoresl, sp==speed])
-      | speed <- speeds
-      ]
-
-  putStr "   cave:"
-  forM_ [1..maxcavenum] $ \ca -> printf (" %"++show scorew++"d") ca
-  putStr "\n"
-  putStrLn "speed:"
-  forM_ (reverse [5,10..maxmaxspeed]) $ \sp -> do
-    let mscs = lookup sp highscoresbyspeed
-    when (sp >= defmaxspeed || isJust mscs) $ do
-      printf "%s %2d    " (if sp == currentspeed then ">" else " ") sp
-      forM_ [1..maxcavenum] $ \ca -> do
-        let msc = mscs >>= lookup ca
-        putStr $ maybe (replicate scorew ' '++"-") (printf (" %"++show scorew++"d")) msc
-      putStr "\n"
-  putStr "\n"
-  putStr $ progressMessage sstate
-
 -------------------------------------------------------------------------------
 -- tweakable parameters
 
@@ -622,7 +588,7 @@ main = do
     caveerr a = err $ "CAVE should be 1-"++show maxcavenum++" (received "++a++"), see --help)"
 
   if
-    | "-h" `elem` flags || "--help" `elem` flags -> exitWithUsage sstate
+    | "-h" `elem` flags || "--help" `elem` flags -> printUsage sstate
     | "-s" `elem` flags || "--scores" `elem` flags -> printScores
     | "-p" `elem` flags || "--print-cave" `elem` flags -> do
       let
@@ -667,9 +633,49 @@ main = do
                       ]
       playGames True ("--stats" `elem` flags) sstate{currentcave=cave, currentspeed=speed}
 
--- Generate the cave just like the game would, printing each line to stdout.
--- Optionally, limit to just the first N lines.
--- Does not show crashes currently.
+-- Print help.
+printUsage sstate = do
+  clearScreen
+  setCursorPosition 0 0
+  termsize <- displaySizeStrSafe
+  msox <- findExecutable "sox"
+  printBanner
+  putStr $ usage termsize msox sstate
+
+-- Print high scores.
+printScores = do
+  sstate@SavedState{..} <- getSavedState
+  clearScreen
+  -- setCursorPosition 0 0  -- omit for now, allow entr to scroll output
+  printBanner
+  -- putStrLnAnsi [bold_]
+  putStrLn "\nHIGH SCORES\n-----------"
+  let 
+    highscoresl = reverse $ M.toList highscores
+    speeds = reverse $ nubSort $ map (fst.fst) highscoresl
+    scores = nubSort $ map snd highscoresl
+    scorew = length $ show (maximumDef 0 scores)
+    highscoresbyspeed = [
+      (speed, [(ca,sc) | ((sp,ca),sc) <- highscoresl, sp==speed])
+      | speed <- speeds
+      ]
+  putStr "   cave:"
+  forM_ [1..maxcavenum] $ \ca -> printf (" %"++show scorew++"d") ca
+  putStr "\n"
+  putStrLn "speed:"
+  forM_ (reverse [5,10..maxmaxspeed]) $ \sp -> do
+    let mscs = lookup sp highscoresbyspeed
+    when (sp >= defmaxspeed || isJust mscs) $ do
+      printf "%s %2d    " (if sp == currentspeed then ">" else " ") sp
+      forM_ [1..maxcavenum] $ \ca -> do
+        let msc = mscs >>= lookup ca
+        putStr $ maybe (replicate scorew ' '++"-") (printf (" %"++show scorew++"d")) msc
+      putStr "\n"
+  putStr "\n"
+  putStr $ progressMessage sstate
+
+-- Print the current or selected cave to stdout, generating it just like the game would.
+-- With a depth argument, print just the first N lines.
 printCave cave mdepth SavedState{allcrashes} = do
   let crashes = fromMaybe M.empty $ M.lookup cave allcrashes
   putStrLnAnsi [bold_] $ progname ++ " cave "++show cave
@@ -1074,14 +1080,6 @@ pp = pprint
 pprintc :: Show a => a -> IO ()
 pprintc = PrettySimple.pPrint
 
-exitWithUsage sstate = do
-  clearScreen >> setCursorPosition 0 0
-  termsize <- displaySizeStrSafe
-  msox <- findExecutable "sox"
-  printBanner
-  putStr $ usage termsize msox sstate
-  exitSuccess
-
 displaySizeStrSafe = handle (\(_::ATGException) -> return "unknown") $ do
   (w,h) <- displaySize
   return $ show w++"x"++show h
@@ -1093,7 +1091,6 @@ secsToTicks = round . (* fromIntegral fps)
 half :: Integral a => a -> a
 half = (`div` 2)
 
-err = errorWithoutStackTrace
 
 -- Run a shell command, either synchronously or in a background process,
 -- ignoring any output, errors or exceptions. ("Silent" here does not mean sound.)
@@ -1116,6 +1113,10 @@ insertOrUpdate newval updatefn = M.alter (maybe (Just newval) (Just . updatefn))
 
 count :: Ord a => [a] -> [(a, Int)]
 count xs = [(y, length ys) | ys@(y:_) <- group $ sort xs]
+
+-- Exit with an error message and no stack trace, after resetting the
+-- terminal style if stdout supports ANSI. Uses unsafePerformIO.
+err = unsafePlay (setSGR' []) . errorWithoutStackTrace
 
 -- Set stdout's terminal output style (Select Graphics Rendition mode)
 -- if it supports ANSI color.
