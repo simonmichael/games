@@ -253,7 +253,7 @@ data Scene =
 -- several of these one "game" if they complete multiple runs without crashing.
 data GameState = GameState {
   -- read-only app state
-   stats           :: Bool       -- whether to show statistics
+   showstats       :: Bool       -- whether to show dev statistics
   -- current app state
   ,firstgame       :: Bool       -- is this the first game since app start ? (affects help)
   ,controlspressed :: Bool       -- have any movement keys been pressed since game start ? (affects help)
@@ -290,8 +290,8 @@ data GameState = GameState {
   }
   deriving (Show)
 
-newGameState firstgame stats w h cave maxspeed hs crashes = GameState {
-   stats           = stats
+newGameState firstgame w h cave maxspeed hs crashes = GameState {
+   showstats       = False
   ,firstgame       = firstgame
   ,controlspressed = False
   ,showhelp        = True
@@ -631,7 +631,7 @@ main = do
                       ,"To reach cave "++show c ++ " at speed "++show sp ++ ", you must complete at least cave "++ show (c-cavelookahead) ++ "."
                       ,unlockedCavesMessage sstate
                       ]
-      playGames True ("--stats" `elem` flags) sstate{currentcave=cave, currentspeed=speed}
+      playGames True sstate{currentcave=cave, currentspeed=speed}
 
 -- Print help.
 printUsage sstate = do
@@ -679,7 +679,7 @@ printScores = do
 printCave cave mdepth SavedState{allcrashes} = do
   let crashes = fromMaybe M.empty $ M.lookup cave allcrashes
   putStrLnAnsi [bold_] $ progname ++ " cave "++show cave
-  go mdepth $ newGameState False False gamewidth 25 cave 15 0 crashes
+  go mdepth $ newGameState False gamewidth 25 cave 15 0 crashes
   where
     go (Just 0) _ = return ()
     go mremaining g@GameState{..} =
@@ -710,15 +710,14 @@ printCave cave mdepth SavedState{allcrashes} = do
 
 -- Play the game repeatedly at the given cave and speed,
 -- updating save files and/or advancing to next cave when appropriate.
--- The first arguments specify if this is the first game of a session and
--- if onscreen dev stats should be displayed.
-playGames :: Bool -> Bool -> SavedState -> IO ()
-playGames firstgame showstats sstate@SavedState{..} = do
+-- The first argument specifies if this is the first game of a session.
+playGames :: Bool -> SavedState -> IO ()
+playGames firstgame sstate@SavedState{..} = do
   (screenw,screenh) <- displaySize  -- use full screen height for each game (apparently last line is unusable on windows ? surely it's fine)
   let
     highscore = fromMaybe 0 $ M.lookup (currentspeed, currentcave) highscores
     crashes = fromMaybe M.empty $ M.lookup currentcave allcrashes
-    game = newGame firstgame showstats screenh currentspeed currentcave highscore crashes
+    game = newGame firstgame screenh currentspeed currentcave highscore crashes
 
   -- run one game. Will exit if terminal is too small.
   g@GameState{scene,score,exit,playerx} <- Terminal.Game.playGameS game
@@ -747,8 +746,7 @@ playGames firstgame showstats sstate@SavedState{..} = do
 
   -- play again, or exit the app
   if not exit
-  then 
-    playGames False showstats sstate'
+  then playGames False sstate'
   else do
     putStr $ progressMessage sstate'
     putStrLn ""
@@ -756,13 +754,13 @@ playGames firstgame showstats sstate@SavedState{..} = do
     when soundEnabled quitSound
 
 -- Initialise a new game (a cave run).
-newGame :: Bool -> Bool -> Height -> MaxSpeed -> CaveNum -> Score -> CaveCrashes -> Game GameState
-newGame firstgame stats gameh maxspeed cave hs crashes =
+newGame :: Bool -> Height -> MaxSpeed -> CaveNum -> Score -> CaveCrashes -> Game GameState
+newGame firstgame gameh maxspeed cave hs crashes =
   Game { gScreenWidth   = gamewidth, -- width used (and required) for drawing (a constant 80 for repeatable caves)
          gScreenHeight  = gameh,     -- height used for drawing (the screen height)
          gFPS           = fps,       -- target frames/game ticks per second
-         gInitState     = newGameState firstgame stats gamewidth gameh cave maxspeed hs crashes,
-         gLogicFunction = step',
+         gInitState     = newGameState firstgame gamewidth gameh cave maxspeed hs crashes,
+         gLogicFunction = stepCommon,
          gDrawFunction  = draw,
          gQuitFunction  = timeToQuit
        }
@@ -770,15 +768,17 @@ newGame firstgame stats gameh maxspeed cave hs crashes =
 -------------------------------------------------------------------------------
 -- event handlers & game logic for each scene
 
--- Before calling step, do updates that should happen on every tick no matter what.
-step' g@GameState{..} Tick = step g' Tick
+-- Before calling step, do general event processing common to all modes.
+stepCommon g@GameState{..} Tick = step g' Tick
   where
     g' = g{
        gtick=gtick+1
       ,stick=stick+1
       ,showhelp=showhelp && not (timeToHideHelp g)
       }
-step' g ev = step g ev
+stepCommon g@GameState{..} ev@(KeyPress k)
+  | k == 's'              = step g{ showstats=not showstats } ev
+stepCommon g ev = step g ev
 
 step g@GameState{scene=Playing, ..} (KeyPress k)
   | k == 'q'              = g { exit=True }
@@ -1180,7 +1180,7 @@ draw g@GameState{..} =
   & (1, speedx)     % drawSpeed g
   & (playery+speedpan, playerx) % drawPlayer g
   & (if gameOver g then (gameovery, gameoverx) % drawGameOver g gameoverw gameoverh else id)
-  & (if stats then (3, gamew - 13) % drawStats g else id)
+  & (if showstats then (3, gamew - 13) % drawStats g else id)
   where
     titlew     = 12
     cavenamew  = fromIntegral $ 10 + length (show cavenum) + length (show cavespeedmax)
