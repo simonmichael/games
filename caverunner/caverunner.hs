@@ -324,7 +324,7 @@ data GameState = GameState {
   }
   deriving (Show)
 
-newGameState firstgame stats w h cavenum maxspeed hs crashes = GameState {
+newGameState firstgame stats w h cave maxspeed hs crashes = GameState {
    stats           = stats
   ,firstgame       = firstgame
   ,controlspressed = False
@@ -338,12 +338,12 @@ newGameState firstgame stats w h cavenum maxspeed hs crashes = GameState {
   ,gameh           = h
   ,gtick           = 0
   ,stick           = 0
-  ,cavenum         = cavenum
+  ,cavenum         = cave
   ,highscore       = hs
   ,highscorecopy   = hs
   ,score           = 0
   ,scorebonus      = 0
-  ,randomgen       = mkStdGen cavenum
+  ,randomgen       = mkStdGen cave
   ,cavesteps       = 0
   ,cavelines       = []
   ,cavecrashes     = crashes
@@ -615,53 +615,65 @@ main = do
   logMigrate
   sstate@SavedState{..} <- getSavedState
   args <- getArgs
-  let (flags, args') = partition ("-" `isPrefixOf`) args
-  when ("-h" `elem` flags || "--help" `elem` flags) $ exitWithUsage sstate
-  let
-    (speed, cavenum, hasspeedarg, hascavearg) =
-      case args' of
-        []    -> (currentspeed, currentcave, False, False)
-        [s]   -> (checkspeed $ readDef (speederr s) s, savedStateCurrentCaveAt sp sstate, True, False)
-          where sp = checkspeed $ readDef (speederr s) s
-        [s,c] -> (sp, checkcave sp $ readDef (caveerr c) c, True, True)
-          where sp = checkspeed $ readDef (speederr s) s
-        _     -> err "too many arguments, please see --help"
-        where
-          checkspeed s = if s >= 1 && s <= maxmaxspeed then s else speederr $ show s
-          speederr a = err $ "SPEED should be 1-"++show maxmaxspeed++" (received "++a++"), see --help)"
-          checkcave s c
-            | "-p" `elem` flags || "--print-cave" `elem` flags = c
-            | c <= highcave + cavelookahead = c
-            | otherwise = err $ init $ unlines [
-                 ""
-                ,"To reach cave "++show c ++ " at speed "++show s ++ ", you must complete at least cave "++ show (c-cavelookahead) ++ "."
-                ,unlockedCavesMessage sstate
-                ]
-            where highcave = fromMaybe 0 $ M.lookup s highcaves
-          caveerr a = err $ "CAVE should be 1-"++show maxcavenum++" (received "++a++"), see --help)"
+  let 
+    (flags, args') = partition ("-" `isPrefixOf`) args
+    highcave (Just sp) = fromMaybe 0 $ M.lookup sp highcaves
+    highcave Nothing   = maximumDef 0 $ M.elems highcaves
+    caveerr a = err $ "CAVE should be 1-"++show maxcavenum++" (received "++a++"), see --help)"
 
-  cavenum `seq` if
+  if
+    | "-h" `elem` flags || "--help" `elem` flags -> exitWithUsage sstate
+    | "-s" `elem` flags || "--scores" `elem` flags -> printScores
+    | "-p" `elem` flags || "--print-cave" `elem` flags -> do
+      let
+        (cave, mdepth) = case args' of
+          []    -> (currentcave, Nothing)
+          [c]   -> (parseCave c, Nothing)
+          [c,d] -> (parseCave c, readMay d)
+          _     -> err "too many arguments, please see --help"
+          where
+            parseCave c = checkcave $ readDef (caveerr c) c
+              where
+                checkcave c
+                  | c <= highcave Nothing + cavelookahead = c
+                  | otherwise = err $ init $ unlines [
+                      ""
+                      ,"To view cave "++show c ++ ", you must complete at least cave "++ show (c-cavelookahead) ++ " (at any speed)."
+                      ]
+      printCave cave mdepth sstate
+
     --  | "--print-speed-sound-volume" `elem` flags -> printSpeedSoundVolumes
 
-    | "-s" `elem` flags || "--scores" `elem` flags -> printScores
-
-    | "-p" `elem` flags || "--print-cave" `elem` flags ->
-      let 
-        mdepth = if hascavearg then Just cavenum else Nothing
-        cave = if hasspeedarg then speed else currentcave
-      in printCave cave mdepth sstate
-
     | otherwise -> do
-      let sstate' = sstate{ currentcave=cavenum, currentspeed=speed }
-      playGames True ("--stats" `elem` flags) sstate'
+      let
+        (speed, cave) = case args' of
+          []    -> (currentspeed, currentcave)
+          [s]   -> (sp, savedStateCurrentCaveAt sp sstate) where sp = parseSpeed s
+          [s,c] -> (sp, parseCave sp c)                    where sp = parseSpeed s
+          _     -> err "too many arguments, please see --help"
+          where
+            parseSpeed s = checkspeed $ readDef (speederr s) s
+              where
+                checkspeed s = if s >= 1 && s <= maxmaxspeed then s else speederr $ show s
+                speederr a = err $ "SPEED should be 1-"++show maxmaxspeed++" (received "++a++"), see --help)"
+            parseCave sp c = checkcave sp $ readDef (caveerr c) c
+              where
+                checkcave sp c
+                  | c <= highcave (Just sp) + cavelookahead = c
+                  | otherwise = err $ init $ unlines [
+                      ""
+                      ,"To reach cave "++show c ++ " at speed "++show sp ++ ", you must complete at least cave "++ show (c-cavelookahead) ++ "."
+                      ,unlockedCavesMessage sstate
+                      ]
+      playGames True ("--stats" `elem` flags) sstate{currentcave=cave, currentspeed=speed}
 
 -- Generate the cave just like the game would, printing each line to stdout.
 -- Optionally, limit to just the first N lines.
 -- Does not show crashes currently.
-printCave cavenum mdepth SavedState{allcrashes} = do
-  let crashes = fromMaybe M.empty $ M.lookup cavenum allcrashes
-  putStrLnAnsi [bold_] $ progname ++ " cave "++show cavenum
-  go mdepth $ newGameState False False gamewidth 25 cavenum 15 0 crashes
+printCave cave mdepth SavedState{allcrashes} = do
+  let crashes = fromMaybe M.empty $ M.lookup cave allcrashes
+  putStrLnAnsi [bold_] $ progname ++ " cave "++show cave
+  go mdepth $ newGameState False False gamewidth 25 cave 15 0 crashes
   where
     go (Just 0) _ = return ()
     go mremaining g@GameState{..} =
@@ -739,11 +751,11 @@ playGames firstgame showstats sstate@SavedState{..} = do
 
 -- Initialise a new game (a cave run).
 newGame :: Bool -> Bool -> Height -> MaxSpeed -> CaveNum -> Score -> CaveCrashes -> Game GameState
-newGame firstgame stats gameh maxspeed cavenum hs crashes =
+newGame firstgame stats gameh maxspeed cave hs crashes =
   Game { gScreenWidth   = gamewidth, -- width used (and required) for drawing (a constant 80 for repeatable caves)
          gScreenHeight  = gameh,     -- height used for drawing (the screen height)
          gFPS           = fps,       -- target frames/game ticks per second
-         gInitState     = newGameState firstgame stats gamewidth gameh cavenum maxspeed hs crashes,
+         gInitState     = newGameState firstgame stats gamewidth gameh cave maxspeed hs crashes,
          gLogicFunction = step',
          gDrawFunction  = draw,
          gQuitFunction  = timeToQuit
