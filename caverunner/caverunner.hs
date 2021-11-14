@@ -654,12 +654,16 @@ printScores = do
     highscoresl = reverse $ M.toList highscores
     speeds = reverse $ nubSort $ map (fst.fst) highscoresl
     scores = nubSort $ map snd highscoresl
-    scorew = length $ show (maximumDef 0 scores)
     highscoresbyspeed = [
       (speed, [(ca,sc) | ((sp,ca),sc) <- highscoresl, sp==speed])
       | speed <- speeds
       ]
-  putStr "   cave:"
+    total = sum scores
+    weightedtotal = sum [ scoreWeightBySpeed sp $ sum (map snd scs) | (sp, scs) <- highscoresbyspeed]
+    scorew = length $ show (maximumDef 0 scores)
+    width = length col1heading + maxcavenum * (scorew+1)
+    col1heading = "   cave:"
+  putStr col1heading
   forM_ [1..maxcavenum] $ \ca -> printf (" %"++show scorew++"d") ca
   putStr "\n"
   putStrLn "speed:"
@@ -672,7 +676,21 @@ printScores = do
         putStr $ maybe (replicate scorew ' '++"-") (printf (" %"++show scorew++"d")) msc
       putStr "\n"
   putStr "\n"
+  printf ("%"++show width++"s\n") (printf "         Total: %7d" total :: String)
+  printf ("%"++show width++"s\n") (printf "Speed-weighted: %7d" weightedtotal :: String)
+  putStr "\n"
   putStr $ progressMessage sstate
+
+scoreWeightBySpeed :: MaxSpeed -> Score -> Score
+scoreWeightBySpeed speed score = round $ fromIntegral score ** (1 + weight)
+  where
+    neutralspeed  = 15  -- no weighting at this speed (= defmaxspeed)
+    relativespeed = fromIntegral speed - neutralspeed
+    weight        = relativespeed / weightdiv
+    weightdiv     = 100 -- larger means less weight
+
+printSampleWeightedScores = pprint $ groupSort $ reverse 
+  [(sc, (sp, scoreWeightBySpeed sp sc)) | sp <- [5,10..60], sc <- [1,10,100,460]]
 
 -- Print the current or selected cave to stdout, generating it just like the game would.
 -- With a depth argument, print just the first N lines.
