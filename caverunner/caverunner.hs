@@ -1,5 +1,5 @@
 #!/usr/bin/env stack
-{- stack script --optimize --verbosity=warn --resolver=nightly-2021-10-19
+{- stack script --optimize --verbosity=warn --resolver=nightly-2021-11-15
   --ghc-options=-threaded
   --package ansi-terminal
   --package ansi-terminal-game
@@ -774,14 +774,16 @@ playGames firstgame sstate@SavedState{..} = do
 -- Initialise a new game (a cave run).
 newGame :: Bool -> Height -> MaxSpeed -> CaveNum -> Score -> CaveCrashes -> Game GameState
 newGame firstgame gameh maxspeed cave hs crashes =
-  Game { gScreenWidth   = gamewidth, -- width used (and required) for drawing (a constant 80 for repeatable caves)
-         gScreenHeight  = gameh,     -- height used for drawing (the screen height)
-         gFPS           = fps,       -- target frames/game ticks per second
-         gInitState     = newGameState firstgame gamewidth gameh cave maxspeed hs crashes,
-         gLogicFunction = stepCommon,
-         gDrawFunction  = draw,
-         gQuitFunction  = timeToQuit
-       }
+  simpleGame
+    (gamewidth  -- width used (and required) for drawing (a constant 80 for repeatable caves)
+    ,gameh)     -- height used for drawing (the screen height)
+    fps         -- target game ticks per second
+    gstate      -- initial game state
+    stepCommon  -- logic function
+    draw        -- drawing function
+    timeToQuit  -- time to quit function
+  where
+    gstate = newGameState firstgame gamewidth gameh cave maxspeed hs crashes
 
 -------------------------------------------------------------------------------
 -- event handlers & game logic for each scene
