@@ -1204,7 +1204,7 @@ draw genv@GEnv{eTermDims=(termw,termh),..} g@GameState{gamew,gameh,..} =
   & (1, speedx)     % drawSpeed g
   & (playery+speedpan, playerx) % drawPlayer g
   & (if gameOver g then (gameovery, gameoverx) % drawGameOver g gameoverw gameoverh else id)
-  & (if showstats then (3, gamew - 13) % drawStats g else id)
+  & (if showstats then (3, gamew - 13) % drawStats genv g else id)
   where
     titlew     = 12
     cavenamew  = fromIntegral $ 10 + length (show cavenum) + length (show cavespeedmax)
@@ -1298,8 +1298,9 @@ drawScore GameState{..} =
 
 drawSpeed g@GameState{..} = stringPlane " speed " ||| stringPlane (printf "%3.f " cavespeed)
 
-drawStats g@GameState{..} =
-      (stringPlane "   gtick " ||| stringPlane (printf "%4d " gtick))
+drawStats GEnv{..} g@GameState{..} =
+      (stringPlane "     fps " ||| stringPlane (printf "%4d " eFPS))
+  === (stringPlane "   gtick " ||| stringPlane (printf "%4d " gtick))
   === (stringPlane "   stick " ||| stringPlane (printf "%4d " stick))
   === (stringPlane "scene " ||| stringPlane (printf "%-7s " (showSceneCompact 7 scene)))
   === (stringPlane "    depth " ||| stringPlane (printf "%3d " (playerDepth g)))
