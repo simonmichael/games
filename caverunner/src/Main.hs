@@ -249,6 +249,9 @@ data Scene =
                      -- and phase: 1 show game over, 2 show bonus/highscore, 3 (not used) show press a key
   deriving (Show,Eq)
 
+scenePhase Playing = 0
+scenePhase (RunEnd _ phase) = phase
+
 -- In-memory state for a single cave run. A player might consider
 -- several of these one "game" if they complete multiple runs without crashing.
 data GameState = GameState {
@@ -267,7 +270,7 @@ data GameState = GameState {
   ,gamew           :: Width      -- width of the game  (but perhaps not the screen)
   ,gameh           :: Height     -- height of the game (and usually the screen)
   ,gtick           :: Integer    -- ticks elapsed within the current game
-  ,stick           :: Integer    -- ticks elapsed within the current scene
+  ,stick           :: Integer    -- ticks elapsed within the current scene while not paused
   ,cavenum         :: CaveNum
   ,highscore       :: Score      -- high score for the current cave and max speed
   ,highscorecopy   :: Score      -- a copy to help detect new high score during cave end scene
@@ -788,21 +791,23 @@ newGame firstgame gameh maxspeed cave hs crashes =
 -- event handlers & game logic for each scene
 
 -- Before calling step, do general event processing common to all modes.
+stepCommon genv g@GameState{..} ev@(KeyPress k)
+  | k == 'q'         = g { exit=True }
+  | k == 's'         = g { showstats=not showstats }
+  | k == 'p'         = g { pause=not pause }
+  -- space is another pause key, except during run end "press a key" phase
+  | k == ' ', scenePhase scene /= 3 = g { pause=not pause }
 stepCommon genv g@GameState{..} Tick = step genv g' Tick
   where
     g' = g{
        gtick=gtick+1
-      ,stick=stick+1
+      ,stick=(if pause then id else (+1)) stick
       ,showhelp=showhelp && not (timeToHideHelp g)
       }
-stepCommon genv g@GameState{..} ev@(KeyPress k)
-  | k == 's'         = step genv g{ showstats=not showstats } ev
 stepCommon genv g ev = step genv g ev
 
+
 step genv g@GameState{scene=Playing, ..} (KeyPress k)
-  | k == 'q'              = g { exit=True }
-  | k `elem` "p ", pause  = g { pause=False }
-  | k `elem` "p "         = g { pause=True,  showhelp=True }
   | not pause, k == leftkey =
       g { playerx   = max 1 (playerx - 1)
         , cavespeed = max cavespeedmin (cavespeed * cavespeedbrake)
@@ -814,7 +819,9 @@ step genv g@GameState{scene=Playing, ..} (KeyPress k)
         , controlspressed = True
         }
   | otherwise = g
-
+step genv g@GameState{scene=RunEnd _ phase, ..} (KeyPress _)
+  | phase==3, not pause = g{restart=True}
+step _ g (KeyPress _) = g
 step genv g@GameState{scene=Playing, ..} Tick =
   let
     starting = gtick==1
@@ -874,7 +881,6 @@ step genv g@GameState{scene=Playing, ..} Tick =
             ,cavespeed    = cavespeed'
             ,cavespeedmin = cavespeedmin'
             }
-
 step genv g@GameState{scene=RunEnd compl phase, ..} Tick
   -- run end + completionbonusdelaysecs: add score bonus, maybe show high score message, phase 2
   | phase==1 && stick > secsToTicks completionbonusdelaysecs =
@@ -896,24 +902,6 @@ step genv g@GameState{scene=RunEnd compl phase, ..} Tick
        ,restarttimer = tick restarttimer
        }
   | otherwise = g{restarttimer = tick restarttimer}
-
-step genv g@GameState{..} (KeyPress 'q') = g { exit = True }
-
--- XXX trying to support pause during game over
--- step g@GameState{..} (KeyPress k)
---   | k `elem` " p"         = g{pause=True}
---   | k `elem` " p", pause  = g{pause=False}
---   | gameOver g, isExpired restarttimer = g{restart=True}
---   | gameOver g = g
-
-step genv g@GameState{..} (KeyPress _) | gameOver g, isExpired restarttimer = g{restart=True}
-
-step genv g@GameState{..} (KeyPress _) | gameOver g = g
-
-step genv g@GameState{..} (KeyPress k)
-  | k `elem` " p"         = g{pause=True}
-  | k `elem` " p", pause  = g{pause=False}
-  | otherwise             = g
 
 -- step GameState{..} Tick = error $ "No handler for " ++ show scene ++ " -> " ++ show Tick ++ " !"
 
@@ -1198,7 +1186,7 @@ draw genv@GEnv{eTermDims=(termw,termh),..} g@GameState{gamew,gameh,..} =
   -- & (1, 1)          % blankPlane gamew 1
   & (1, titlex)     % drawTitle g
   & (1, cavenamex)  % drawCaveName g
-  & (if showhelp then (3, helpx) % drawHelp g else id)
+  & (if pause || showhelp then (3, helpx) % drawHelp g else id)
   & (1, highscorex) % drawHighScore g
   & (1, scorex)     % drawScore g
   & (1, speedx)     % drawSpeed g
