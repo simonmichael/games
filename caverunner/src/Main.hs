@@ -792,11 +792,11 @@ newGame firstgame gameh maxspeed cave hs crashes =
 
 -- Before calling step, do general event processing common to all modes.
 stepCommon genv g@GameState{..} ev@(KeyPress k)
-  | k == 'q'         = g { exit=True }
-  | k == 's'         = g { showstats=not showstats }
-  | k == 'p'         = g { pause=not pause }
-  -- space is another pause key, except during run end "press a key" phase
-  | k == ' ', scenePhase scene /= 3 = g { pause=not pause }
+  | k == 'q'            = g { exit=True }
+  | k == 's'            = g { showstats=not showstats }
+  | k == 'p'            = g { pause=not pause }
+  -- space is another pause key, while playing but not during run end
+  | k == ' ', scene==Playing = g { pause=not pause }
 stepCommon genv g@GameState{..} Tick = step genv g' Tick
   where
     g' = g{
@@ -808,20 +808,22 @@ stepCommon genv g ev = step genv g ev
 
 
 step genv g@GameState{scene=Playing, ..} (KeyPress k)
-  | not pause, k == leftkey =
+  | k == leftkey =
       g { playerx   = max 1 (playerx - 1)
         , cavespeed = max cavespeedmin (cavespeed * cavespeedbrake)
         , controlspressed = True
+        , pause = False
         }
-  | not pause, k == rightkey =
+  | k == rightkey =
       g { playerx   = min gamew (playerx + 1)
         , cavespeed = max cavespeedmin (cavespeed * cavespeedbrake)
         , controlspressed = True
+        , pause = False
         }
   | otherwise = g
 step genv g@GameState{scene=RunEnd _ phase, ..} (KeyPress _)
   | phase==3, not pause = g{restart=True}
-step _ g (KeyPress _) = g
+step _ g (KeyPress _) = g{pause=False}
 step genv g@GameState{scene=Playing, ..} Tick =
   let
     starting = gtick==1
