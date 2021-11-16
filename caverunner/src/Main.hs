@@ -1179,7 +1179,7 @@ blankPlaneFull GEnv{eTermDims=(termw,termh)} = blankPlane termw termh
 
 centered genv = (blankPlaneFull genv ***)
 
-draw genv@GEnv{eTermDims=(termw,termh),..} g@GameState{gamew,gameh,..} =
+draw genv@GEnv{eTermDims=(termw,termh),eFPS} g@GameState{gamew,gameh,..} =
   -- clear screen, center game drawing area
     centered genv $ blankPlane gamew gameh
   -- cave
@@ -1189,6 +1189,7 @@ draw genv@GEnv{eTermDims=(termw,termh),..} g@GameState{gamew,gameh,..} =
   & (1, cavenamex)  % drawCaveName g
   & (1, highscorex) % drawHighScore g
   & (1, scorex)     % drawScore g
+  & (1, fpsx)       % (stringPlane " fps " ||| stringPlane (printf "%3d " eFPS))
   & (1, speedx)     % drawSpeed g
   -- help
   & (if showhelp || pause then (3, helpx) % drawHelp g else id)
@@ -1204,14 +1205,16 @@ draw genv@GEnv{eTermDims=(termw,termh),..} g@GameState{gamew,gameh,..} =
     highscorew = 17
     scorew     = 11
     speedw     = 10
+    fpsw       =  9
     gameoverw  = 48
-    gameoverh  = 7
+    gameoverh  =  7
 
     titlex     = 1
     cavenamex  = min (highscorex - cavenamew) (half (highscorex - (titlex+titlew)) + titlex + titlew - half cavenamew)
-    highscorex = half gamew - half highscorew
-    scorex     = highscorex + highscorew + half (speedx - (highscorex + highscorew)) - half scorew
-    speedx     = gamew - speedw + 1
+    highscorex = half gamew - half highscorew - 4
+    scorex     = highscorex + highscorew + (fpsx - (highscorex + highscorew)) `div` 3 - half scorew - 4
+    speedx     = fpsx - (fpsx - (highscorex + highscorew)) `div` 3 - half speedw
+    fpsx       = gamew - fpsw + 1
     helpx      = 1
     gameoverx  = half gamew - half gameoverw
     gameovery  = max (playery+2) $ half gameh - half gameoverh
@@ -1275,6 +1278,7 @@ drawTitle GameState{..} =
 drawCaveName GameState{..} = stringPlane $ " cave "++show cavenum++" @ "++show (round cavespeedmax) ++ " "
 
 drawHelp GameState{..} =
+      -- stringPlane " "
       (stringPlane (" "++[leftkey]++" ")  #bold  ||| stringPlane " left ")
   === (stringPlane (" "++[rightkey]++" ") #bold  ||| stringPlane " right ")
   === (stringPlane "spc" #bold  ||| if pause then stringPlane " pause " #bold else stringPlane " pause ")
@@ -1293,8 +1297,8 @@ drawScore GameState{..} =
 drawSpeed g@GameState{..} = stringPlane " speed " ||| stringPlane (printf "%3.f " cavespeed)
 
 drawStats GEnv{..} g@GameState{..} =
-      (stringPlane "     fps " ||| stringPlane (printf "%4d " eFPS))
-  === (stringPlane "   gtick " ||| stringPlane (printf "%4d " gtick))
+      -- (stringPlane "     fps " ||| stringPlane (printf "%4d " eFPS))
+      (stringPlane "   gtick " ||| stringPlane (printf "%4d " gtick))
   === (stringPlane "   stick " ||| stringPlane (printf "%4d " stick))
   === (stringPlane "scene " ||| stringPlane (printf "%-7s " (showSceneCompact 7 scene)))
   === (stringPlane "    depth " ||| stringPlane (printf "%3d " (playerDepth g)))
