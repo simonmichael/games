@@ -1,6 +1,5 @@
-{-# START_FILE {{name}}.cabal #-}
-name:                {{name}}
-version:             {{version}}
+name:                caverunner
+version:             0.98
 -- synopsis:
 -- description:
 homepage:            https://github.com/simonmichael/games/tree/main/caverunner
@@ -17,7 +16,7 @@ extra-source-files:
     README.md
 --  CHANGES.md
 
-executable {{name}}
+executable caverunner
   hs-source-dirs:      src
   main-is:             Main.hs
   default-language:    Haskell2010
@@ -35,23 +34,3 @@ executable {{name}}
     , safe
     , time
     , typed-process
-
-{-# START_FILE stack.yaml #-}
-resolver: nightly-2021-11-15
-packages:
-- .
-extra-deps:
-- ansi-terminal-game-1.6.0.2
-- timers-tick-0.5.0.1
-
-{-# START_FILE Setup.hs #-}
-import Distribution.Simple
-main = defaultMain
-
-{-# START_FILE src/Main.hs #-}
-module Main where
-
-main :: IO ()
-main = do
-  putStrLn "hello world"
-
