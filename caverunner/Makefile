@@ -37,11 +37,11 @@ loc:
 	cloc $(PROG)
 
 pkg:
-	stack new $@ pkg.hsfiles -p "category:Games" -p "name:caverunner" -p "version:0.98" \
+	stack new $@ pkg.hsfiles -p "name:caverunner" -p "version:0.98" \
 	&& cd $@ \
 	&& ln -sf ../../caverunner.hs src/Main.hs \
-  && ln -sf ../README.md \
-  #&& ln -sf ../LICENSE \
+	&& ln -sf ../README.md \
+	&& ln -sf ../LICENSE \
 
 pkg-rebuild:
 	ls $(PROG) pkg.hsfiles | entr -r bash -c 'rm -rf pkg && make pkg && (cd pkg; stack build)'
