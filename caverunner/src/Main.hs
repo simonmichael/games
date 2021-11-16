@@ -125,7 +125,7 @@ unlockedCavesMessage SavedState{..} =
 wallchar           = '#'
 spacechar          = ' '
 crashchar          = '*'
-fps                = 60  -- target frame rate; computer/terminal may not achieve it
+tps                = 60  -- target frame rate; computer/terminal may not achieve it
 restartdelaysecs   = 3   -- minimum pause after game over
 minhelpsecs        = 5   -- minimum time to show onscreen help in first game
 completionbonusdelaysecs   = 2
@@ -279,9 +279,9 @@ data GameState = GameState {
   ,cavecrashes     :: CaveCrashes -- past crashes in this cave, for display
   ,cavewidth       :: Width      -- current cave width (inner space between the walls)
   ,cavecenter      :: GameCol    -- current x coordinate in game area of the cave's horizontal midpoint
-  ,cavespeed       :: Speed      -- current speed of player dive/cave scroll in lines/s, must be <= fps
+  ,cavespeed       :: Speed      -- current speed of player dive/cave scroll in lines/s, must be <= tps
   ,cavespeedmin    :: Speed      -- current minimum speed player can brake to
-  ,cavespeedmax    :: Speed      -- maximum speed player can accelerate to, must be <= fps
+  ,cavespeedmax    :: Speed      -- maximum speed player can accelerate to, must be <= tps
   ,cavetimer       :: Timed Bool -- delay before next cave scroll
   ,speedpan        :: Height     -- current number of rows to pan the viewport down, based on current speed
   ,playery         :: GameRow    -- player's y coordinate in game area
@@ -775,7 +775,7 @@ playGames firstgame sstate@SavedState{..} = do
 newGame :: Bool -> Height -> MaxSpeed -> CaveNum -> Score -> CaveCrashes -> Game GameState
 newGame firstgame gameh maxspeed cave hs crashes =
   Game {
-     gTPS           = fps         -- target game ticks per second
+     gTPS           = tps         -- target game ticks per second
     ,gInitState     = gstate      -- initial game state
     ,gLogicFunction = stepCommon  -- logic function
     ,gDrawFunction  = draw        -- drawing function
@@ -1105,7 +1105,7 @@ displaySizeStrSafe = handle (\(_::ATGException) -> return "unknown") $ do
 
 -- Convert seconds to game ticks based on global frame rate.
 secsToTicks :: Float -> Integer
-secsToTicks = round . (* fromIntegral fps)
+secsToTicks = round . (* fromIntegral tps)
 
 half :: Integral a => a -> a
 half = (`div` 2)
