@@ -1,24 +1,7 @@
 PROG=caverunner.hs
 
-# keep synced with script's header
-PACKAGES=\
-  --package ansi-terminal\
-  --package ansi-terminal-game\
-  --package containers\
-  --package directory\
-  --package extra\
-  --package filepath\
-  --package pretty-show\
-  --package pretty-simple\
-  --package safe\
-  --package time\
-  --package typed-process\
-
-ghc:
-	stack ghc $(PACKAGES) $(PROG) -- -threaded
-
 ghci:
-	stack ghci $(PACKAGES) $(PROG)
+	stack ghci
 
 ghcid:
 	ghcid -c 'make ghci'
