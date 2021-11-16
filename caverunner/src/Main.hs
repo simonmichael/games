@@ -1402,7 +1402,7 @@ gameStartSound = void $ forkIO $ do
     ]
 
 depthSound depth = do
-  let v = 0.3
+  let v = 0.1
   soxPlay False [".15", 
     "sin", show $ 100 + depth,
     "sin", show $ 1000 - depth, 
