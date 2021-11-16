@@ -774,14 +774,13 @@ playGames firstgame sstate@SavedState{..} = do
 -- Initialise a new game (a cave run).
 newGame :: Bool -> Height -> MaxSpeed -> CaveNum -> Score -> CaveCrashes -> Game GameState
 newGame firstgame gameh maxspeed cave hs crashes =
-  simpleGame
-    (gamewidth  -- width used (and required) for drawing (a constant 80 for repeatable caves)
-    ,gameh)     -- height used for drawing (the screen height)
-    fps         -- target game ticks per second
-    gstate      -- initial game state
-    stepCommon  -- logic function
-    draw        -- drawing function
-    timeToQuit  -- time to quit function
+  Game {
+     gTPS           = fps         -- target game ticks per second
+    ,gInitState     = gstate      -- initial game state
+    ,gLogicFunction = stepCommon  -- logic function
+    ,gDrawFunction  = draw        -- drawing function
+    ,gQuitFunction  = timeToQuit  -- time to quit function
+  }
   where
     gstate = newGameState firstgame gamewidth gameh cave maxspeed hs crashes
 
@@ -789,18 +788,18 @@ newGame firstgame gameh maxspeed cave hs crashes =
 -- event handlers & game logic for each scene
 
 -- Before calling step, do general event processing common to all modes.
-stepCommon g@GameState{..} Tick = step g' Tick
+stepCommon genv g@GameState{..} Tick = step genv g' Tick
   where
     g' = g{
        gtick=gtick+1
       ,stick=stick+1
       ,showhelp=showhelp && not (timeToHideHelp g)
       }
-stepCommon g@GameState{..} ev@(KeyPress k)
-  | k == 's'              = step g{ showstats=not showstats } ev
-stepCommon g ev = step g ev
+stepCommon genv g@GameState{..} ev@(KeyPress k)
+  | k == 's'         = step genv g{ showstats=not showstats } ev
+stepCommon genv g ev = step genv g ev
 
-step g@GameState{scene=Playing, ..} (KeyPress k)
+step genv g@GameState{scene=Playing, ..} (KeyPress k)
   | k == 'q'              = g { exit=True }
   | k `elem` "p ", pause  = g { pause=False }
   | k `elem` "p "         = g { pause=True,  showhelp=True }
@@ -816,7 +815,7 @@ step g@GameState{scene=Playing, ..} (KeyPress k)
         }
   | otherwise = g
 
-step g@GameState{scene=Playing, ..} Tick =
+step genv g@GameState{scene=Playing, ..} Tick =
   let
     starting = gtick==1
     gameover = playerCrashed g
@@ -876,7 +875,7 @@ step g@GameState{scene=Playing, ..} Tick =
             ,cavespeedmin = cavespeedmin'
             }
 
-step g@GameState{scene=RunEnd compl phase, ..} Tick
+step genv g@GameState{scene=RunEnd compl phase, ..} Tick
   -- run end + completionbonusdelaysecs: add score bonus, maybe show high score message, phase 2
   | phase==1 && stick > secsToTicks completionbonusdelaysecs =
       let
@@ -898,7 +897,7 @@ step g@GameState{scene=RunEnd compl phase, ..} Tick
        }
   | otherwise = g{restarttimer = tick restarttimer}
 
-step g@GameState{..} (KeyPress 'q') = g { exit = True }
+step genv g@GameState{..} (KeyPress 'q') = g { exit = True }
 
 -- XXX trying to support pause during game over
 -- step g@GameState{..} (KeyPress k)
@@ -907,11 +906,11 @@ step g@GameState{..} (KeyPress 'q') = g { exit = True }
 --   | gameOver g, isExpired restarttimer = g{restart=True}
 --   | gameOver g = g
 
-step g@GameState{..} (KeyPress _) | gameOver g, isExpired restarttimer = g{restart=True}
+step genv g@GameState{..} (KeyPress _) | gameOver g, isExpired restarttimer = g{restart=True}
 
-step g@GameState{..} (KeyPress _) | gameOver g = g
+step genv g@GameState{..} (KeyPress _) | gameOver g = g
 
-step g@GameState{..} (KeyPress k)
+step genv g@GameState{..} (KeyPress k)
   | k `elem` " p"         = g{pause=True}
   | k `elem` " p", pause  = g{pause=False}
   | otherwise             = g
@@ -1188,7 +1187,12 @@ bgvividwhite    = SetColor Background Vivid White
 -------------------------------------------------------------------------------
 -- drawing for each scene
 
-draw g@GameState{..} =
+blankPlaneFull GEnv{eTermDims=(termw,termh)} = blankPlane termw termh
+
+centered genv = (blankPlaneFull genv ***)
+
+draw genv@GEnv{eTermDims=(termw,termh),..} g@GameState{gamew,gameh,..} =
+    centered genv $
     blankPlane gamew gameh
   & (max 1 (gameh - length cavelines + 1), 1) % drawCave g
   -- & (1, 1)          % blankPlane gamew 1
