@@ -1264,8 +1264,10 @@ drawPlayer g@GameState{..} =
   where
     (char, hue, maybeinvert) = 
       case scene of 
-        RunEnd False _ -> (crashChar numcrashes, Red, invert)
-        _              -> (playerchar,           Blue, id)
+        RunEnd False phase
+          | phase > 1         -> (crashChar numcrashes, Red,  invert)
+          | stick `mod` 4 < 2 -> (crashChar numcrashes, Red,  invert)
+        _                     -> (playerchar,           Blue, id)
         where
           numcrashes = 1 + caveCrashesAt (playerDepth g) playerx cavecrashes
 
