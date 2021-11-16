@@ -201,9 +201,8 @@ type Score      = Int
 type GameRow = Row
 type GameCol = Column
 
--- Coordinates within a cave, from 1,1 at the cave mouth's midpoint.
-type CaveRow = Row
-type CaveCol = Column
+type CaveRow = Row     -- Depth within a cave, from 1 at the cave mount.
+type CaveCol = Column  -- X position within a cave
 
 -- One line within a cave, with its depth and left/right wall positions.
 data CaveLine = CaveLine CaveRow CaveCol CaveCol deriving (Show)
@@ -960,7 +959,7 @@ stepCave GameState{..} =
       min (cavewidth' `div` 4) 1
 
     -- choose cave's next x position, with constraints:
-    -- keep the walls within bounds
+    -- keep the walls within game bounds (80 wide)
     -- keep it somewhat navigable
     --  (user can move sideways at ~5/s, don't allow long traverses faster than that)
     (randomdx, randomgen') = getRandom (-maxdx,maxdx) randomgen
