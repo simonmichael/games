@@ -1180,19 +1180,24 @@ blankPlaneFull GEnv{eTermDims=(termw,termh)} = blankPlane termw termh
 centered genv = (blankPlaneFull genv ***)
 
 draw genv@GEnv{eTermDims=(termw,termh),..} g@GameState{gamew,gameh,..} =
-    centered genv $
-    blankPlane gamew gameh
+  -- clear screen, center game drawing area
+    centered genv $ blankPlane gamew gameh
+  -- cave
   & (max 1 (gameh - length cavelines + 1), 1) % drawCave g
-  -- & (1, 1)          % blankPlane gamew 1
+  -- top info
   & (1, titlex)     % drawTitle g
   & (1, cavenamex)  % drawCaveName g
-  & (if pause || showhelp then (3, helpx) % drawHelp g else id)
   & (1, highscorex) % drawHighScore g
   & (1, scorex)     % drawScore g
   & (1, speedx)     % drawSpeed g
-  & (playery+speedpan, playerx) % drawPlayer g
-  & (if gameOver g then (gameovery, gameoverx) % drawGameOver g gameoverw gameoverh else id)
+  -- help
+  & (if showhelp || pause then (3, helpx) % drawHelp g else id)
+  -- stats
   & (if showstats then (3, gamew - 13) % drawStats genv g else id)
+  -- run end dialog
+  & (if gameOver g then (gameovery, gameoverx) % drawGameOver g gameoverw gameoverh else id)
+  -- player
+  & (playery+speedpan, playerx) % drawPlayer g
   where
     titlew     = 12
     cavenamew  = fromIntegral $ 10 + length (show cavenum) + length (show cavespeedmax)
@@ -1203,11 +1208,11 @@ draw genv@GEnv{eTermDims=(termw,termh),..} g@GameState{gamew,gameh,..} =
     gameoverh  = 7
 
     titlex     = 1
-    helpx      = 1
-    speedx     = gamew - speedw + 1
-    scorex     = highscorex + highscorew + half (speedx - (highscorex + highscorew)) - half scorew
-    highscorex = half gamew - half highscorew
     cavenamex  = min (highscorex - cavenamew) (half (highscorex - (titlex+titlew)) + titlex + titlew - half cavenamew)
+    highscorex = half gamew - half highscorew
+    scorex     = highscorex + highscorew + half (speedx - (highscorex + highscorew)) - half scorew
+    speedx     = gamew - speedw + 1
+    helpx      = 1
     gameoverx  = half gamew - half gameoverw
     gameovery  = max (playery+2) $ half gameh - half gameoverh
 
@@ -1229,7 +1234,8 @@ drawCaveLine gamew cavecrashes line@(CaveLine d _ _) =
     crashes :: [(CaveCol, Int)]
     crashes = maybe [] M.toList $ M.lookup d cavecrashes
 
-drawCrash num = stringPlaneTrans ' ' [crashChar num] #bold -- #color hue Vivid 
+drawCrash num = 
+  stringPlaneTrans ' ' [crashChar num] #bold #invert -- #color hue Vivid 
 
 crashChar :: Int -> Char
 crashChar n 
@@ -1251,12 +1257,12 @@ showCaveLineNumbered gamew l n =
     num = show n
 
 drawPlayer g@GameState{..} =
-  cell char #bold #color hue Vivid
+  cell char #bold #color hue Vivid #maybeinvert
   where
-    (char, hue) = 
+    (char, hue, maybeinvert) = 
       case scene of 
-        RunEnd False _ -> (crashChar numcrashes, Red)
-        _              -> (playerchar,           Blue)
+        RunEnd False _ -> (crashChar numcrashes, Red, invert)
+        _              -> (playerchar,           Blue, id)
         where
           numcrashes = 1 + caveCrashesAt (playerDepth g) playerx cavecrashes
 
