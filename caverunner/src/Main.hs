@@ -293,8 +293,8 @@ data GameState = GameState {
   }
   deriving (Show)
 
-newGameState firstgame w h cave maxspeed hs crashes = GameState {
-   showstats       = False
+newGameState firstgame showstats w h cave maxspeed hs crashes = GameState {
+   showstats       = showstats
   ,firstgame       = firstgame
   ,controlspressed = False
   ,showhelp        = True
@@ -634,7 +634,7 @@ main = do
                       ,"To reach cave "++show c ++ " at speed "++show sp ++ ", you must complete at least cave "++ show (c-cavelookahead) ++ "."
                       ,unlockedCavesMessage sstate
                       ]
-      playGames True sstate{currentcave=cave, currentspeed=speed}
+      playGames True ("--stats" `elem` flags) sstate{currentcave=cave, currentspeed=speed}
 
 -- Print help.
 printUsage sstate = do
@@ -700,7 +700,7 @@ printSampleWeightedScores = pprint $ groupSort $ reverse
 printCave cave mdepth SavedState{allcrashes} = do
   let crashes = fromMaybe M.empty $ M.lookup cave allcrashes
   putStrLnAnsi [bold_] $ progname ++ " cave "++show cave
-  go mdepth $ newGameState False gamewidth 25 cave 15 0 crashes
+  go mdepth $ newGameState False False gamewidth 25 cave 15 0 crashes
   where
     go (Just 0) _ = return ()
     go mremaining g@GameState{..} =
@@ -732,16 +732,17 @@ printCave cave mdepth SavedState{allcrashes} = do
 -- Play the game repeatedly at the given cave and speed,
 -- updating save files and/or advancing to next cave when appropriate.
 -- The first argument specifies if this is the first game of a session.
-playGames :: Bool -> SavedState -> IO ()
-playGames firstgame sstate@SavedState{..} = do
+-- The second argument specifies if stats should be shown by default.
+playGames :: Bool -> Bool -> SavedState -> IO ()
+playGames firstgame showstats sstate@SavedState{..} = do
   (screenw,screenh) <- displaySize  -- use full screen height for each game (apparently last line is unusable on windows ? surely it's fine)
   let
     highscore = fromMaybe 0 $ M.lookup (currentspeed, currentcave) highscores
     crashes = fromMaybe M.empty $ M.lookup currentcave allcrashes
-    game = newGame firstgame screenh currentspeed currentcave highscore crashes
+    game = newGame firstgame showstats screenh currentspeed currentcave highscore crashes
 
   -- run one game. Will exit if terminal is too small.
-  g@GameState{scene,score,exit,playerx} <- Terminal.Game.playGameS game
+  g@GameState{showstats,scene,score,exit,playerx} <- Terminal.Game.playGameS game
   -- game ended by crashing or quitting. Ctrl-c is not caught here.
 
   let atend = playerAtEnd g
@@ -767,7 +768,7 @@ playGames firstgame sstate@SavedState{..} = do
 
   -- play again, or exit the app
   if not exit
-  then playGames False sstate'
+  then playGames False showstats sstate'
   else do
     putStr $ progressMessage sstate'
     putStrLn ""
@@ -775,8 +776,8 @@ playGames firstgame sstate@SavedState{..} = do
     when soundEnabled quitSound
 
 -- Initialise a new game (a cave run).
-newGame :: Bool -> Height -> MaxSpeed -> CaveNum -> Score -> CaveCrashes -> Game GameState
-newGame firstgame gameh maxspeed cave hs crashes =
+newGame :: Bool -> Bool -> Height -> MaxSpeed -> CaveNum -> Score -> CaveCrashes -> Game GameState
+newGame firstgame showstats gameh maxspeed cave hs crashes =
   Game {
      gTPS           = tps         -- target game ticks per second
     ,gInitState     = gstate      -- initial game state
@@ -785,7 +786,7 @@ newGame firstgame gameh maxspeed cave hs crashes =
     ,gQuitFunction  = timeToQuit  -- time to quit function
   }
   where
-    gstate = newGameState firstgame gamewidth gameh cave maxspeed hs crashes
+    gstate = newGameState firstgame showstats gamewidth gameh cave maxspeed hs crashes
 
 -------------------------------------------------------------------------------
 -- event handlers & game logic for each scene
