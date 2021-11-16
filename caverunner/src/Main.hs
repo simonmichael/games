@@ -1243,9 +1243,9 @@ drawCrash num =
 crashChar :: Int -> Char
 crashChar n 
   | n < 1     = ' '
-  | n == 1    = '*'
+  | n == 1    = 'x'
   | n <= 9    = chr $ ord '0' + n
-  | otherwise = 'X'
+  | otherwise = '9'
 
 showCaveLine gamew (CaveLine depth left right) =
   concat [
