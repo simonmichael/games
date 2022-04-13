@@ -1,5 +1,5 @@
 #!/usr/bin/env stack
-{- stack script --optimize --verbosity=warn --resolver=nightly-2021-11-15
+{- stack script --optimize --verbosity=info --resolver=nightly-2022-04-04
   --ghc-options=-threaded
   --package ansi-terminal
   --package ansi-terminal-game
@@ -571,7 +571,8 @@ savedStateUpdate speed cave score nextcave row col sstate@SavedState{..} =
     ,allcrashes   = allCrashesAdd cave row col allcrashes
     }
 
--- What's the saved current cave at the given speed ?
+-- What's the current highest reached cave at the given speed ?
+-- It's the cave after the highest cave completed at that speed.
 savedStateCurrentCaveAt :: MaxSpeed -> SavedState -> CaveNum
 savedStateCurrentCaveAt speed sstate@SavedState{..} =
   maybe defcavenum (+1) $ M.lookup speed highcaves
@@ -729,7 +730,7 @@ printCave cave mdepth SavedState{allcrashes} = do
             }
 
 -- Play the game repeatedly at the given cave and speed,
--- updating save files and/or advancing to next cave when appropriate.
+-- updating state and advancing to next cave/speed when appropriate.
 -- The first argument specifies if this is the first game of a session.
 -- The second argument specifies if stats should be shown by default.
 playGames :: Bool -> Bool -> SavedState -> IO ()
@@ -1177,8 +1178,6 @@ bgvividwhite    = SetColor Background Vivid White
 -------------------------------------------------------------------------------
 -- drawing for each scene
 
-blankPlaneFull GEnv{eTermDims=(termw,termh)} = blankPlane termw termh
-
 centered genv = (blankPlaneFull genv ***)
 
 draw genv@GEnv{eTermDims=(termw,termh),eFPS} g@GameState{gamew,gameh,..} =
@@ -1302,20 +1301,19 @@ drawScore GameState{..} =
 drawSpeed g@GameState{..} = stringPlane " speed " ||| stringPlane (printf "%3.f " cavespeed)
 
 drawStats GEnv{..} g@GameState{..} =
-      -- (stringPlane "     fps " ||| stringPlane (printf "%4d " eFPS))
-      (stringPlane "   gtick " ||| stringPlane (printf "%4d " gtick))
-  === (stringPlane "   stick " ||| stringPlane (printf "%4d " stick))
-  === (stringPlane "scene " ||| stringPlane (printf "%-7s " (showSceneCompact 7 scene)))
-  === (stringPlane "    depth " ||| stringPlane (printf "%3d " (playerDepth g)))
+      (stringPlane "   gtick " ||| stringPlane (printf "%5d " gtick))
+  === (stringPlane "   stick " ||| stringPlane (printf "%5d " stick))
+  === (stringPlane " scene " ||| stringPlane (printf "%-7s " (showSceneCompact 7 scene)))
+  === (stringPlane "     depth " ||| stringPlane (printf "%3d " (playerDepth g)))
   -- === (stringPlane "depthmod5 " ||| stringPlane (printf "%3d " (playerDepth g `mod` 5)))
-  === (stringPlane "    width " ||| stringPlane (printf "%3d " cavewidth))
-  === (stringPlane " minspeed " ||| stringPlane (printf "%3.f " cavespeedmin))
+  === (stringPlane "     width " ||| stringPlane (printf "%3d " cavewidth))
+  -- === (stringPlane "  minspeed " ||| stringPlane (printf "%3.f " cavespeedmin))
   -- === (stringPlane " speedpan " ||| stringPlane (printf "%3d " speedpan))
   -- === (stringPlane "    speed " ||| stringPlane (printf "%3.f " cavespeed))
   -- === (stringPlane "   bonus " ||| stringPlane (printf "%4d " scorebonus))
-  === (stringPlane "   score " ||| stringPlane (printf "%4d " score))
-  === (stringPlane "  hscore " ||| stringPlane (printf "%4d " highscore))
-  === (stringPlane "hscorecp " ||| stringPlane (printf "%4d " highscorecopy))
+  === (stringPlane "    score " ||| stringPlane (printf "%4d " score))
+  === (stringPlane "   hscore " ||| stringPlane (printf "%4d " highscore))
+  === (stringPlane " hscorecp " ||| stringPlane (printf "%4d " highscorecopy))
 
 showSceneCompact width scene = 
   case scene of

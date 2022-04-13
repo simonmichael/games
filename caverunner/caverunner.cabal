@@ -24,7 +24,7 @@ executable caverunner
   build-depends:
       base >= 4.7 && < 5
     , ansi-terminal
-    , ansi-terminal-game >= 1.6 && < 1.7
+    , ansi-terminal-game >= 1.8 && < 1.9
     , containers
     , directory
     , extra
