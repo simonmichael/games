@@ -84,6 +84,7 @@ Persistence
 
 ### Roadmap/Wishlist
 
+- clean non-interactive output, make `caverunner.hs -s | nc termbin.com 9999` better
 - better run/install docs
 - total score/stats/ranking
 - prettier high scores
