@@ -2,12 +2,13 @@ Small games, experiments and game dev notes.
 
 ## Games and experiments
 
-✅ = confirmed installable on target platforms in 2021
+✅ = confirmed installable on target platforms as of release date
 🕹 = a playable game
 🔔 = sound
 
 |     |                                                                                             |              |                             |
 |-----|---------------------------------------------------------------------------------------------|--------------|-----------------------------|
+| ✅🕹 | [tiny-games-hs](tiny-games-hs)                                                              | 2023         | haskell |
 | ✅🕹🔔 | [caverunner](caverunner)                                                                    | 2021         | haskell, ansi-terminal-game |
 | &#x3000;&#x3000;🔔  | [breakout](https://github.com/simonmichael/breakout)                                        | 2007, 2020   | haskell, sdl                |
 | ✅  | [metapong](https://github.com/simonmichael/metapong)                                        | 2019         | haskell, ansi-terminal-game |
