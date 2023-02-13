@@ -8,7 +8,7 @@ Small games, experiments and game dev notes.
 
 |     |                                                                                             |              |                             |
 |-----|---------------------------------------------------------------------------------------------|--------------|-----------------------------|
-| ✅🕹 | [tiny-games-hs](../../haskell-game/tiny-games-hs)                                           | 2023         | haskell |
+| ✅🕹 | [tiny-games-hs](https://github.com/haskell-game/tiny-games-hs)                                           | 2023         | haskell |
 | ✅🕹🔔 | [caverunner](caverunner)                                                                    | 2021         | haskell, ansi-terminal-game |
 | &#x3000;&#x3000;🔔  | [breakout](https://github.com/simonmichael/breakout)                                        | 2007, 2020   | haskell, sdl                |
 | ✅  | [metapong](https://github.com/simonmichael/metapong)                                        | 2019         | haskell, ansi-terminal-game |
