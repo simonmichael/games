@@ -4,7 +4,7 @@ version:             0.98
 -- description:
 homepage:            https://github.com/simonmichael/games/tree/main/caverunner
 bug-reports:         https://github.com/simonmichael/games/issues
-license:             BSD3
+license:             GPL-3
 license-file:        LICENSE
 author:              Simon Michael <simon@joyful.com>
 maintainer:          Simon Michael <simon@joyful.com>
